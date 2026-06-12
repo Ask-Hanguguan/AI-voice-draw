@@ -1,23 +1,42 @@
-﻿import { useState, useRef, useCallback, useEffect } from "react";
+﻿import { useState, useRef, useCallback } from "react";
 import { useAppStore } from "./stores/appStore";
 import { voiceFeedback } from "./speech/voiceFeedback";
+import { parseCommand } from "./canvas/commandParser";
+import { canvasManager } from "./canvas/canvasManager";
 import StatusBar from "./components/StatusBar";
+import Canvas from "./components/Canvas";
+
+// ========== 确认应答匹配 ==========
+function matchConfirm(text: string): boolean {
+  const cleaned = text.replace(/[，。！？,!? ]/g, "");
+  return /^(确定|好的|是的|可以|行|对|嗯|好)$/.test(cleaned);
+}
+
+function matchCancel(text: string): boolean {
+  const cleaned = text.replace(/[，。！？,!? ]/g, "");
+  return /^(取消|算了|不要|不用|不)$/.test(cleaned);
+}
 
 export default function App() {
+  // ===== Store selectors (仅用于渲染) =====
   const status = useAppStore((s) => s.status);
+  const lastFeedbackType = useAppStore((s) => s.lastFeedbackType);
+  const lastFeedbackMessage = useAppStore((s) => s.lastFeedbackMessage);
+  const canvasConfig = useAppStore((s) => s.canvasConfig);
+  const pendingConfirm = useAppStore((s) => s.pendingConfirm);
+
+  // ===== Store actions =====
   const setStatus = useAppStore((s) => s.setStatus);
   const setSpeechReady = useAppStore((s) => s.setSpeechReady);
   const setLastRecognizedText = useAppStore((s) => s.setLastRecognizedText);
-  const lastFeedbackType = useAppStore((s) => s.lastFeedbackType);
-  const lastFeedbackMessage = useAppStore((s) => s.lastFeedbackMessage);
 
   const [logs, setLogs] = useState<string[]>([]);
   const [lastText, setLastText] = useState("");
+
   const listeningRef = useRef(false);
   const statusRef = useRef(status);
   const restartCountRef = useRef(0);
 
-  // 始终同步最新 status 到 ref
   statusRef.current = status;
 
   const addLog = useCallback((msg: string) => {
@@ -26,12 +45,10 @@ export default function App() {
     setLogs((prev) => [...prev.slice(-19), `${time} ${msg}`]);
   }, []);
 
-  /** 宽松匹配唤醒词：处理 ASR 同音字/漏字问题 */
+  // ===== 唤醒词 =====
   function matchWakeWord(text: string): boolean {
     const cleaned = text.replace(/[\s，。！？,!?、"]/g, "");
-    // 精确匹配
     if (cleaned.includes("小笔小笔")) return true;
-    // 常见 ASR 同音/形近错误
     const fuzzyPatterns = [
       /小[笔比毕必壁逼鼻彼].*小[笔比毕必壁逼鼻彼]/,
       /小[笔比毕必壁逼鼻彼]{2}/,
@@ -39,15 +56,124 @@ export default function App() {
       /小笔/,
     ];
     for (const pattern of fuzzyPatterns) {
-      if (pattern.test(cleaned)) {
-        addLog(`模糊匹配唤醒词: "${cleaned}" -> ${pattern}`);
-        return true;
-      }
+      if (pattern.test(cleaned)) return true;
     }
     return false;
   }
 
-  /** 单次识别 */
+  // ===== 指令执行（始终读最新 store，不依赖闭包） =====
+  function executeCommand(text: string) {
+    const store = useAppStore.getState();
+    const pending = store.pendingConfirm;
+
+    // 1. 优先处理待确认对话
+    if (pending) {
+      if (matchConfirm(text)) {
+        addLog(`确认: "${text}"`);
+        store.setPendingConfirm(null);
+        pending.action();
+        return;
+      }
+      if (matchCancel(text)) {
+        addLog(`取消: "${text}"`);
+        store.setPendingConfirm(null);
+        voiceFeedback.info("已取消");
+        return;
+      }
+      voiceFeedback.guidance("请说确定或取消");
+      return;
+    }
+
+    // 2. 解析指令
+    const cmd = parseCommand(text);
+    addLog(`指令: ${cmd.type} ${JSON.stringify(cmd.params)}`);
+
+    switch (cmd.type) {
+      case "exit": {
+        addLog("休眠");
+        setStatus("sleeping");
+        setLastText("");
+        setLastRecognizedText("");
+        voiceFeedback.sleep();
+        break;
+      }
+
+      case "new_canvas": {
+        const w = cmd.params.width as number;
+        const h = cmd.params.height as number;
+
+        // 如果有未保存内容，语音提醒
+        if (store.hasUnsavedContent) {
+          voiceFeedback.info("未保存内容将丢失");
+        }
+
+        store.setCanvasConfig({ width: w, height: h });
+        voiceFeedback.success("新建画布");
+        addLog(`新建画布 ${w}x${h}`);
+        break;
+      }
+
+      case "clear_canvas": {
+        // 优先用运行时判断（canvasManager），比 store 更可靠
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (!canvasManager.hasObjects()) {
+          voiceFeedback.info("画布已经是空的");
+          return;
+        }
+        // 确认对话
+        store.setPendingConfirm({
+          question: "确定要清空画布吗？",
+          action: () => {
+            canvasManager.clear();
+            store.setHasUnsavedContent(false);
+            voiceFeedback.success("清空画布");
+            addLog("画布已清空");
+          },
+        });
+        voiceFeedback.confirm("确定要清空画布吗？");
+        break;
+      }
+
+      case "undo": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (canvasManager.undo()) {
+          voiceFeedback.undo();
+        } else {
+          voiceFeedback.nothingToUndo();
+        }
+        break;
+      }
+
+      case "redo": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (canvasManager.redo()) {
+          voiceFeedback.redo();
+        } else {
+          voiceFeedback.nothingToRedo();
+        }
+        break;
+      }
+
+      case "unrecognized":
+        voiceFeedback.unrecognized();
+        break;
+    }
+  }
+
+  // execRef 保持最新 executeCommand 引用，避免闭包陈旧
+  const execRef = useRef(executeCommand);
+  execRef.current = executeCommand;
+
+  // ===== 语音识别 =====
   const startOnce = useCallback(() => {
     if (!listeningRef.current) return;
 
@@ -63,9 +189,7 @@ export default function App() {
     rec.interimResults = true;
     rec.lang = "zh-CN";
 
-    rec.onstart = () => {
-      restartCountRef.current = 0;
-    };
+    rec.onstart = () => { restartCountRef.current = 0; };
 
     rec.onresult = (event: any) => {
       let text = "";
@@ -74,40 +198,33 @@ export default function App() {
         text += event.results[i][0].transcript.trim();
         if (event.results[i].isFinal) isFinal = true;
       }
-      if (!text) return;
+      if (!text || !isFinal) return;
 
       setLastText(text);
       setLastRecognizedText(text);
+      addLog(`识别: "${text}"`);
 
-      if (isFinal) {
-        addLog(`识别: "${text}"`);
-      }
+      const currentStatus = statusRef.current;
 
-      if (isFinal) {
-        const currentStatus = statusRef.current;
-
-        if (currentStatus === "sleeping" && matchWakeWord(text)) {
+      // sleeping → 检测唤醒词
+      if (currentStatus === "sleeping") {
+        if (matchWakeWord(text)) {
           addLog("唤醒！");
           setStatus("active");
           voiceFeedback.wake();
         }
-        if (currentStatus === "active") {
-          const cleaned = text.replace(/[，。！？,!? ]/g, "");
-          if (["退出", "休眠", "睡觉", "休息"].includes(cleaned)) {
-            addLog("休眠");
-            setStatus("sleeping");
-            setLastText("");
-            setLastRecognizedText("");
-            voiceFeedback.sleep();
-          }
-        }
+        return;
+      }
+
+      // active → 执行指令（通过 ref 确保始终调用最新版本）
+      if (currentStatus === "active") {
+        execRef.current(text);
       }
     };
 
     rec.onerror = (event: any) => {
       if (event.error === "no-speech" || event.error === "aborted") return;
-      const errMsg = `识别错误: ${event.error}`;
-      addLog(errMsg);
+      addLog(`识别错误: ${event.error}`);
       if (event.error === "not-allowed") {
         voiceFeedback.error("麦克风权限被拒绝", "请在浏览器设置中允许麦克风访问");
       } else if (event.error === "network") {
@@ -142,65 +259,77 @@ export default function App() {
 
   const handleStart = useCallback(() => {
     if (!(window as any).SpeechRecognition && !(window as any).webkitSpeechRecognition) {
-      addLog("请使用 Chrome 浏览器");
       voiceFeedback.speechUnavailable();
       return;
     }
-    addLog("请求麦克风...");
     setSpeechReady(true);
     listeningRef.current = true;
     startOnce();
     if (status === "idle") {
       setStatus("sleeping");
     }
-  }, [addLog, startOnce, setSpeechReady, setStatus, status]);
+  }, [startOnce, setSpeechReady, setStatus, status]);
 
-  useEffect(() => {
-    // 什么都不做，等用户点击
-  }, []);
+  // ===== 渲染 =====
+  const showCanvas = status === "active" && canvasConfig !== null;
 
   return (
     <div className="w-full h-full bg-gray-950 text-white flex flex-col select-none">
-      {/* F002: 顶部状态栏 — 显示识别文本 + 语音反馈 */}
       {status !== "idle" && <StatusBar />}
 
-      <div
-        className="flex-1 flex flex-col items-center justify-center cursor-pointer"
-        onClick={status === "idle" ? handleStart : undefined}
-      >
-        {status === "idle" && (
-          <>
-            <p className="text-6xl mb-4">🎤</p>
-            <p className="text-2xl font-bold mb-2">点击任意位置启用语音</p>
-            <p className="text-gray-500">请使用 Chrome 浏览器，允许麦克风权限</p>
-          </>
-        )}
-        {status === "sleeping" && (
-          <>
-            <div className="w-24 h-24 rounded-full bg-blue-500/20 animate-ping mb-4" />
-            <p className="text-xl">说"小笔小笔"唤醒</p>
-            {lastText && (
-              <p className="text-blue-300 mt-2 text-lg animate-pulse">"{lastText}"</p>
-            )}
-          </>
-        )}
-        {status === "active" && (
-          <>
-            <div className="flex items-center gap-2 mb-4">
-              <span className="h-3 w-3 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-green-400">语音已激活</span>
-            </div>
-            <p className="text-xl">画布就绪</p>
-            {lastText && (
-              <p className="text-gray-300 mt-2 text-lg">"{lastText}"</p>
-            )}
-            <p className="text-gray-600 text-sm mt-4">说"退出"休眠</p>
-          </>
-        )}
-      </div>
+      {showCanvas ? (
+        <Canvas width={canvasConfig!.width} height={canvasConfig!.height} />
+      ) : (
+        <div
+          className="flex-1 flex flex-col items-center justify-center cursor-pointer"
+          onClick={status === "idle" ? handleStart : undefined}
+        >
+          {status === "idle" && (
+            <>
+              <p className="text-6xl mb-4">🎤</p>
+              <p className="text-2xl font-bold mb-2">点击任意位置启用语音</p>
+              <p className="text-gray-500">请使用 Chrome 浏览器，允许麦克风权限</p>
+            </>
+          )}
+          {status === "sleeping" && (
+            <>
+              <div className="w-24 h-24 rounded-full bg-blue-500/20 animate-ping mb-4" />
+              <p className="text-xl">说"小笔小笔"唤醒</p>
+              {lastText && (
+                <p className="text-blue-300 mt-2 text-lg animate-pulse">"{lastText}"</p>
+              )}
+            </>
+          )}
+          {status === "active" && !canvasConfig && (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="h-3 w-3 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-green-400">语音已激活</span>
+              </div>
+              <p className="text-xl">画布就绪</p>
+              <p className="text-gray-400 mt-2 text-sm">
+                说"新建画布""新建A4画布"或"新建正方形画布"
+              </p>
+              {lastText && (
+                <p className="text-gray-300 mt-2 text-lg">"{lastText}"</p>
+              )}
+              <p className="text-gray-600 text-sm mt-4">说"退出"休眠</p>
+            </>
+          )}
+        </div>
+      )}
 
-      {/* 语音反馈指示器 — F002 */}
-      {lastFeedbackMessage && (
+      {/* 待确认横幅 */}
+      {pendingConfirm && (
+        <div className="mx-auto mb-1 px-4 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 bg-yellow-500/20 text-yellow-300 transition-all">
+          <span className="text-base">❓</span>
+          <span>{pendingConfirm.question}</span>
+          <span className="text-gray-500 ml-2">说"确定"或"取消"</span>
+        </div>
+      )}
+
+      {/* F002 反馈指示器 */}
+      {lastFeedbackMessage && !pendingConfirm && (
         <div
           className={`mx-auto mb-1 px-4 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 transition-all ${
             lastFeedbackType === "success"
@@ -241,7 +370,7 @@ export default function App() {
           <p
             key={i}
             className={`py-0.5 ${
-              log.includes("❌") || log.includes("不可用")
+              log.includes("不可用")
                 ? "text-red-400"
                 : log.includes("唤醒")
                   ? "text-yellow-300 font-bold text-base"
@@ -253,7 +382,13 @@ export default function App() {
                         ? "text-green-400"
                         : log.includes("识别错误")
                           ? "text-orange-400"
-                          : "text-gray-500"
+                          : log.includes("指令:")
+                            ? "text-cyan-400"
+                            : log.includes("确认")
+                              ? "text-green-400"
+                              : log.includes("取消")
+                                ? "text-yellow-400"
+                                : "text-gray-500"
             }`}
           >
             {log}
