@@ -1,14 +1,21 @@
-﻿import { useState, useRef, useCallback } from "react";
+﻿import { useState, useRef, useCallback, useEffect } from "react";
+import { useAppStore } from "./stores/appStore";
+import { voiceFeedback } from "./speech/voiceFeedback";
+import StatusBar from "./components/StatusBar";
 
 export default function App() {
-  const [status, setStatus] = useState<"idle" | "listening" | "active">("idle");
+  const status = useAppStore((s) => s.status);
+  const setStatus = useAppStore((s) => s.setStatus);
+  const setSpeechReady = useAppStore((s) => s.setSpeechReady);
+  const setLastRecognizedText = useAppStore((s) => s.setLastRecognizedText);
+  const lastFeedbackType = useAppStore((s) => s.lastFeedbackType);
+  const lastFeedbackMessage = useAppStore((s) => s.lastFeedbackMessage);
+
   const [logs, setLogs] = useState<string[]>([]);
   const [lastText, setLastText] = useState("");
   const listeningRef = useRef(false);
   const statusRef = useRef(status);
   const restartCountRef = useRef(0);
-  // 实时记录所有识别文本，防止识别结果被状态更新覆盖
-  const bufferRef = useRef("");
 
   // 始终同步最新 status 到 ref
   statusRef.current = status;
@@ -29,11 +36,11 @@ export default function App() {
       /小[笔比毕必壁逼鼻彼].*小[笔比毕必壁逼鼻彼]/,
       /小[笔比毕必壁逼鼻彼]{2}/,
       /[晓小].*[笔比毕].*[晓小].*[笔比毕]/,
-      /小笔/,  // 只说一次也触发，提高容错
+      /小笔/,
     ];
     for (const pattern of fuzzyPatterns) {
       if (pattern.test(cleaned)) {
-        addLog(`🔍 模糊匹配唤醒词: "${cleaned}" -> ${pattern}`);
+        addLog(`模糊匹配唤醒词: "${cleaned}" -> ${pattern}`);
         return true;
       }
     }
@@ -46,7 +53,8 @@ export default function App() {
 
     const API = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!API) {
-      addLog("❌ 浏览器不支持");
+      addLog("语音识别不可用");
+      voiceFeedback.speechUnavailable();
       return;
     }
 
@@ -69,33 +77,28 @@ export default function App() {
       if (!text) return;
 
       setLastText(text);
-      bufferRef.current = text;
+      setLastRecognizedText(text);
 
-      // 显示所有 interim 和 final 结果
       if (isFinal) {
-        addLog(`📝 "${text}"`);
-      } else {
-        // interim 结果太多太吵，用简短前缀
-        addLog(`💬 "${text}"`);
+        addLog(`识别: "${text}"`);
       }
 
       if (isFinal) {
-        // 始终用 ref 读最新状态，避免闭包过期
         const currentStatus = statusRef.current;
-        addLog(`   当前状态: ${currentStatus}, 匹配唤醒词: ${matchWakeWord(text)}`);
 
-        if (currentStatus === "listening" && matchWakeWord(text)) {
-          addLog('🔔 唤醒！');
+        if (currentStatus === "sleeping" && matchWakeWord(text)) {
+          addLog("唤醒！");
           setStatus("active");
-          speak("我在，请说");
+          voiceFeedback.wake();
         }
         if (currentStatus === "active") {
           const cleaned = text.replace(/[，。！？,!? ]/g, "");
           if (["退出", "休眠", "睡觉", "休息"].includes(cleaned)) {
-            addLog('💤 休眠');
-            setStatus("listening");
+            addLog("休眠");
+            setStatus("sleeping");
             setLastText("");
-            speak("已休眠，说小笔小笔唤醒我");
+            setLastRecognizedText("");
+            voiceFeedback.sleep();
           }
         }
       }
@@ -103,14 +106,21 @@ export default function App() {
 
     rec.onerror = (event: any) => {
       if (event.error === "no-speech" || event.error === "aborted") return;
-      addLog(`⚠️ ${event.error}: ${event.message || ""}`);
+      const errMsg = `识别错误: ${event.error}`;
+      addLog(errMsg);
+      if (event.error === "not-allowed") {
+        voiceFeedback.error("麦克风权限被拒绝", "请在浏览器设置中允许麦克风访问");
+      } else if (event.error === "network") {
+        voiceFeedback.error("语音识别网络错误", "请检查网络连接后刷新页面");
+      }
     };
 
     rec.onend = () => {
       if (listeningRef.current) {
         restartCountRef.current++;
         if (restartCountRef.current > 50) {
-          addLog("❌ 重试超限，已停止。请刷新。");
+          addLog("重试超限，已停止。请刷新。");
+          voiceFeedback.error("语音服务异常", "请刷新页面后重试");
           listeningRef.current = false;
           return;
         }
@@ -123,35 +133,37 @@ export default function App() {
     try {
       rec.start();
     } catch (e: any) {
-      addLog(`❌ ${e.message}`);
+      addLog(`启动失败: ${e.message}`);
       setTimeout(() => {
         if (listeningRef.current) startOnce();
       }, 1000);
     }
-  }, [addLog]);
+  }, [addLog, setLastRecognizedText, setStatus]);
 
   const handleStart = useCallback(() => {
     if (!(window as any).SpeechRecognition && !(window as any).webkitSpeechRecognition) {
-      addLog("❌ 请使用 Chrome 浏览器");
+      addLog("请使用 Chrome 浏览器");
+      voiceFeedback.speechUnavailable();
       return;
     }
-    addLog("🔊 请求麦克风...");
+    addLog("请求麦克风...");
+    setSpeechReady(true);
     listeningRef.current = true;
     startOnce();
-    setStatus("listening");
-  }, [addLog, startOnce]);
+    if (status === "idle") {
+      setStatus("sleeping");
+    }
+  }, [addLog, startOnce, setSpeechReady, setStatus, status]);
 
-  function speak(text: string) {
-    if (!window.speechSynthesis) return;
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "zh-CN";
-    u.rate = 1.0;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
-  }
+  useEffect(() => {
+    // 什么都不做，等用户点击
+  }, []);
 
   return (
     <div className="w-full h-full bg-gray-950 text-white flex flex-col select-none">
+      {/* F002: 顶部状态栏 — 显示识别文本 + 语音反馈 */}
+      {status !== "idle" && <StatusBar />}
+
       <div
         className="flex-1 flex flex-col items-center justify-center cursor-pointer"
         onClick={status === "idle" ? handleStart : undefined}
@@ -163,10 +175,10 @@ export default function App() {
             <p className="text-gray-500">请使用 Chrome 浏览器，允许麦克风权限</p>
           </>
         )}
-        {status === "listening" && (
+        {status === "sleeping" && (
           <>
             <div className="w-24 h-24 rounded-full bg-blue-500/20 animate-ping mb-4" />
-            <p className="text-xl">说「小笔小笔」唤醒</p>
+            <p className="text-xl">说"小笔小笔"唤醒</p>
             {lastText && (
               <p className="text-blue-300 mt-2 text-lg animate-pulse">"{lastText}"</p>
             )}
@@ -182,15 +194,45 @@ export default function App() {
             {lastText && (
               <p className="text-gray-300 mt-2 text-lg">"{lastText}"</p>
             )}
-            <p className="text-gray-600 text-sm mt-4">说「退出」休眠</p>
+            <p className="text-gray-600 text-sm mt-4">说"退出"休眠</p>
           </>
         )}
       </div>
 
+      {/* 语音反馈指示器 — F002 */}
+      {lastFeedbackMessage && (
+        <div
+          className={`mx-auto mb-1 px-4 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 transition-all ${
+            lastFeedbackType === "success"
+              ? "bg-green-500/20 text-green-300"
+              : lastFeedbackType === "error"
+                ? "bg-red-500/20 text-red-300"
+                : lastFeedbackType === "confirm"
+                  ? "bg-yellow-500/20 text-yellow-300"
+                  : lastFeedbackType === "guidance"
+                    ? "bg-orange-500/20 text-orange-300"
+                    : "bg-blue-500/20 text-blue-300"
+          }`}
+        >
+          <span className="text-base">
+            {lastFeedbackType === "success"
+              ? "✅"
+              : lastFeedbackType === "error"
+                ? "❌"
+                : lastFeedbackType === "confirm"
+                  ? "❓"
+                  : lastFeedbackType === "guidance"
+                    ? "💡"
+                    : "🔊"}
+          </span>
+          <span>{lastFeedbackMessage}</span>
+        </div>
+      )}
+
       {/* 日志面板 */}
       <div className="h-48 border-t border-gray-800 bg-gray-900/80 font-mono text-xs p-3 overflow-y-auto">
         <p className="text-gray-500 mb-1">
-          📋 日志
+          日志
           {listeningRef.current && <span className="text-green-500 ml-1">● 监听中</span>}
           {status === "active" && <span className="text-yellow-400 ml-1">⚡ 已唤醒</span>}
         </p>
@@ -199,14 +241,19 @@ export default function App() {
           <p
             key={i}
             className={`py-0.5 ${
-              log.includes("❌") ? "text-red-400" :
-              log.includes("🔔") ? "text-yellow-300 font-bold text-base" :
-              log.includes("🔍") ? "text-purple-400" :
-              log.includes("💤") ? "text-blue-300" :
-              log.includes("🔊") ? "text-green-400" :
-              log.includes("⚠️") ? "text-orange-400" :
-              log.includes("当前状态") ? "text-gray-400" :
-              "text-gray-500"
+              log.includes("❌") || log.includes("不可用")
+                ? "text-red-400"
+                : log.includes("唤醒")
+                  ? "text-yellow-300 font-bold text-base"
+                  : log.includes("模糊")
+                    ? "text-purple-400"
+                    : log.includes("休眠")
+                      ? "text-blue-300"
+                      : log.includes("请求")
+                        ? "text-green-400"
+                        : log.includes("识别错误")
+                          ? "text-orange-400"
+                          : "text-gray-500"
             }`}
           >
             {log}
