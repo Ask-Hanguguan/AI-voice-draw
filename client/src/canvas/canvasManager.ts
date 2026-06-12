@@ -1,7 +1,7 @@
 ﻿// 画布管理器 — 封装 Fabric.js Canvas 生命周期
-// 负责创建、销毁、清空画布，以及撤销/恢复操作历史栈
+// 负责创建、销毁、清空画布，撤销/恢复操作历史栈，以及视图缩放
 
-import { Canvas as FabricCanvas } from "fabric";
+import { Canvas as FabricCanvas, Line } from "fabric";
 
 export interface CanvasConfig {
   width: number;
@@ -16,18 +16,25 @@ class CanvasManager {
   private maxHistory = 10;
   contentChanged = false;
 
-  /** 画布是否存在（运行时判断，比 store 更可靠） */
+  private minZoom = 0.1;
+  private maxZoom = 5.0;
+  private zoomStep = 1.2;
+
+  // 记录画布逻辑尺寸，供 clear 后重建网格
+  private logicalWidth = 800;
+  private logicalHeight = 600;
+
   exists(): boolean {
     return this.canvas !== null;
   }
 
   /** 创建画布 */
   create(el: HTMLCanvasElement | string, config?: Partial<CanvasConfig>): FabricCanvas {
-    if (this.canvas) {
-      this.destroy();
-    }
+    if (this.canvas) this.destroy();
 
     const { width = 800, height = 600, backgroundColor = "#ffffff" } = config ?? {};
+    this.logicalWidth = width;
+    this.logicalHeight = height;
 
     this.canvas = new FabricCanvas(el, {
       width,
@@ -41,8 +48,11 @@ class CanvasManager {
     this.redoStack = [];
     this.contentChanged = false;
 
+    // F005: 添加参考网格（缩放时肉眼可辨）
+    this.addGrid();
+
     this.saveSnapshot();
-    console.log(`[Canvas] 已创建 ${width}x${height}, canvas=${!!this.canvas}`);
+    console.log(`[Canvas] 已创建 ${width}x${height}`);
     return this.canvas;
   }
 
@@ -55,12 +65,92 @@ class CanvasManager {
     this.undoStack = [];
     this.redoStack = [];
     this.contentChanged = false;
-    console.log("[Canvas] 已销毁");
+  }
+
+  // ========== F005: 网格背景 ==========
+
+  private addGrid(): void {
+    if (!this.canvas) return;
+    const w = this.logicalWidth;
+    const h = this.logicalHeight;
+    const gridSize = 40;
+    const strokeColor = "rgba(0,0,0,0.06)";
+
+    // 竖线
+    for (let x = 0; x <= w; x += gridSize) {
+      this.canvas.add(
+        new Line([x, 0, x, h], {
+          stroke: strokeColor,
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+        })
+      );
+    }
+    // 横线
+    for (let y = 0; y <= h; y += gridSize) {
+      this.canvas.add(
+        new Line([0, y, w, y], {
+          stroke: strokeColor,
+          selectable: false,
+          evented: false,
+          excludeFromExport: true,
+        })
+      );
+    }
+    this.canvas.renderAll();
+  }
+
+  // ========== F005: 视图缩放 ==========
+
+  zoomIn(): number {
+    if (!this.canvas) return 1;
+    const current = this.canvas.getZoom();
+    const next = Math.min(current * this.zoomStep, this.maxZoom);
+    this.applyZoom(next);
+    return next;
+  }
+
+  zoomOut(): number {
+    if (!this.canvas) return 1;
+    const current = this.canvas.getZoom();
+    const next = Math.max(current / this.zoomStep, this.minZoom);
+    this.applyZoom(next);
+    return next;
+  }
+
+  zoomReset(): number {
+    if (!this.canvas) return 1;
+    this.applyZoom(1);
+    return 1;
+  }
+
+  zoomToFit(containerWidth: number, containerHeight: number): number {
+    if (!this.canvas) return 1;
+    const cw = this.logicalWidth;
+    const ch = this.logicalHeight;
+    const padding = 0.9;
+    const scaleX = (containerWidth * padding) / cw;
+    const scaleY = (containerHeight * padding) / ch;
+    const zoom = Math.min(scaleX, scaleY, 1);
+    this.applyZoom(zoom);
+    return zoom;
+  }
+
+  private applyZoom(zoom: number): void {
+    if (!this.canvas) return;
+    const center = this.canvas.getCenterPoint();
+    this.canvas.zoomToPoint(center, zoom);
+    this.canvas.renderAll();
+  }
+
+  getZoom(): number {
+    if (!this.canvas) return 1;
+    return this.canvas.getZoom();
   }
 
   // ========== 操作历史栈 ==========
 
-  /** 保存当前画布 JSON 快照 */
   saveSnapshot(): void {
     if (!this.canvas) return;
     const json = JSON.stringify(this.canvas.toJSON());
@@ -72,7 +162,6 @@ class CanvasManager {
     this.contentChanged = true;
   }
 
-  /** 撤销 */
   undo(): boolean {
     if (!this.canvas || this.undoStack.length <= 1) return false;
     const current = this.undoStack.pop()!;
@@ -81,7 +170,6 @@ class CanvasManager {
     return true;
   }
 
-  /** 恢复 */
   redo(): boolean {
     if (!this.canvas || this.redoStack.length === 0) return false;
     const next = this.redoStack.pop()!;
@@ -90,7 +178,6 @@ class CanvasManager {
     return true;
   }
 
-  /** 从 JSON 快照恢复画布 */
   private async loadFromSnapshot(json: string): Promise<void> {
     if (!this.canvas) return;
     try {
@@ -104,29 +191,30 @@ class CanvasManager {
 
   // ========== 工具方法 ==========
 
-  /** 清空画布（不检查是否有对象，强制清除） */
   clear(): void {
     if (!this.canvas) return;
-    this.canvas.clear();
-    this.canvas.backgroundColor = "#ffffff";
+    // 只移除用户绘制的图形，保留网格
+    const objs = this.canvas.getObjects();
+    for (const obj of objs) {
+      // 网格线没有 isGrid 标记（未存 JSON），通过 selectable 间接判断
+      if (obj.selectable === false && obj.evented === false) continue;
+      this.canvas.remove(obj);
+    }
     this.canvas.renderAll();
     this.saveSnapshot();
-    console.log("[Canvas] 已清空");
   }
 
-  /** 画布是否有图形对象 */
   hasObjects(): boolean {
     if (!this.canvas) return false;
-    return this.canvas.getObjects().length > 0;
+    // 排除网格线（不可选、不可交互）
+    return this.canvas.getObjects().some(
+      (o) => o.selectable !== false || o.evented !== false
+    );
   }
 
-  /** 获取当前画布尺寸 */
   getSize(): { width: number; height: number } | null {
     if (!this.canvas) return null;
-    return {
-      width: this.canvas.width || 0,
-      height: this.canvas.height || 0,
-    };
+    return { width: this.logicalWidth, height: this.logicalHeight };
   }
 }
 

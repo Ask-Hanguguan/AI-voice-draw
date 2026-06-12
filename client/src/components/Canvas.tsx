@@ -21,9 +21,9 @@ export default function Canvas({ width, height }: Props) {
   return (
     <div
       ref={containerRef}
+      id="canvas-container"
       className="flex-1 flex items-center justify-center bg-gray-900 p-4 overflow-auto"
     >
-      {/* 画布面板：白边 + 光晕 + 阴影，从深色背景中突出 */}
       <div
         className="animate-fadeIn rounded-lg"
         style={{

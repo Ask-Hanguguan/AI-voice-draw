@@ -18,14 +18,12 @@ function matchCancel(text: string): boolean {
 }
 
 export default function App() {
-  // ===== Store selectors (仅用于渲染) =====
   const status = useAppStore((s) => s.status);
   const lastFeedbackType = useAppStore((s) => s.lastFeedbackType);
   const lastFeedbackMessage = useAppStore((s) => s.lastFeedbackMessage);
   const canvasConfig = useAppStore((s) => s.canvasConfig);
   const pendingConfirm = useAppStore((s) => s.pendingConfirm);
 
-  // ===== Store actions =====
   const setStatus = useAppStore((s) => s.setStatus);
   const setSpeechReady = useAppStore((s) => s.setSpeechReady);
   const setLastRecognizedText = useAppStore((s) => s.setLastRecognizedText);
@@ -45,7 +43,6 @@ export default function App() {
     setLogs((prev) => [...prev.slice(-19), `${time} ${msg}`]);
   }, []);
 
-  // ===== 唤醒词 =====
   function matchWakeWord(text: string): boolean {
     const cleaned = text.replace(/[\s，。！？,!?、"]/g, "");
     if (cleaned.includes("小笔小笔")) return true;
@@ -61,12 +58,11 @@ export default function App() {
     return false;
   }
 
-  // ===== 指令执行（始终读最新 store，不依赖闭包） =====
   function executeCommand(text: string) {
     const store = useAppStore.getState();
     const pending = store.pendingConfirm;
 
-    // 1. 优先处理待确认对话
+    // 1. 待确认对话
     if (pending) {
       if (matchConfirm(text)) {
         addLog(`确认: "${text}"`);
@@ -89,6 +85,7 @@ export default function App() {
     addLog(`指令: ${cmd.type} ${JSON.stringify(cmd.params)}`);
 
     switch (cmd.type) {
+      // ---- 退出 ----
       case "exit": {
         addLog("休眠");
         setStatus("sleeping");
@@ -98,23 +95,22 @@ export default function App() {
         break;
       }
 
+      // ---- 新建画布 ----
       case "new_canvas": {
         const w = cmd.params.width as number;
         const h = cmd.params.height as number;
-
-        // 如果有未保存内容，语音提醒
         if (store.hasUnsavedContent) {
           voiceFeedback.info("未保存内容将丢失");
         }
-
         store.setCanvasConfig({ width: w, height: h });
+        store.setZoomLevel(1);
         voiceFeedback.success("新建画布");
         addLog(`新建画布 ${w}x${h}`);
         break;
       }
 
+      // ---- 清空画布 ----
       case "clear_canvas": {
-        // 优先用运行时判断（canvasManager），比 store 更可靠
         if (!canvasManager.exists()) {
           voiceFeedback.guidance("请先新建画布");
           return;
@@ -123,7 +119,6 @@ export default function App() {
           voiceFeedback.info("画布已经是空的");
           return;
         }
-        // 确认对话
         store.setPendingConfirm({
           question: "确定要清空画布吗？",
           action: () => {
@@ -137,6 +132,65 @@ export default function App() {
         break;
       }
 
+      // ---- F005: 画布缩放 ----
+      case "canvas_zoom_in": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const zoom = canvasManager.zoomIn();
+        const pct = Math.round(zoom * 100);
+        store.setZoomLevel(zoom);
+        voiceFeedback.zoomIn(pct);
+        addLog(`放大 ${pct}%`);
+        break;
+      }
+
+      case "canvas_zoom_out": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const zoom = canvasManager.zoomOut();
+        const pct = Math.round(zoom * 100);
+        store.setZoomLevel(zoom);
+        voiceFeedback.zoomOut(pct);
+        addLog(`缩小 ${pct}%`);
+        break;
+      }
+
+      case "canvas_zoom_reset": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        canvasManager.zoomReset();
+        store.setZoomLevel(1);
+        voiceFeedback.zoomReset();
+        addLog("恢复原始大小");
+        break;
+      }
+
+      case "canvas_zoom_fit": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const container = document.getElementById("canvas-container");
+        if (!container) {
+          voiceFeedback.error("无法获取画布容器");
+          return;
+        }
+        const rect = container.getBoundingClientRect();
+        const zoom = canvasManager.zoomToFit(rect.width, rect.height);
+        const pct = Math.round(zoom * 100);
+        store.setZoomLevel(zoom);
+        voiceFeedback.zoomFit(pct);
+        addLog(`适应屏幕 ${pct}%`);
+        break;
+      }
+
+      // ---- 撤销 ----
       case "undo": {
         if (!canvasManager.exists()) {
           voiceFeedback.guidance("请先新建画布");
@@ -150,6 +204,7 @@ export default function App() {
         break;
       }
 
+      // ---- 恢复 ----
       case "redo": {
         if (!canvasManager.exists()) {
           voiceFeedback.guidance("请先新建画布");
@@ -169,11 +224,7 @@ export default function App() {
     }
   }
 
-  // execRef 保持最新 executeCommand 引用，避免闭包陈旧
-  const execRef = useRef(executeCommand);
-  execRef.current = executeCommand;
-
-  // ===== 语音识别 =====
+  // ========== 语音识别 ==========
   const startOnce = useCallback(() => {
     if (!listeningRef.current) return;
 
@@ -198,15 +249,16 @@ export default function App() {
         text += event.results[i][0].transcript.trim();
         if (event.results[i].isFinal) isFinal = true;
       }
-      if (!text || !isFinal) return;
+      if (!text) return;
 
       setLastText(text);
       setLastRecognizedText(text);
-      addLog(`识别: "${text}"`);
 
+      if (!isFinal) return;
+
+      addLog(`识别: "${text}"`);
       const currentStatus = statusRef.current;
 
-      // sleeping → 检测唤醒词
       if (currentStatus === "sleeping") {
         if (matchWakeWord(text)) {
           addLog("唤醒！");
@@ -216,9 +268,8 @@ export default function App() {
         return;
       }
 
-      // active → 执行指令（通过 ref 确保始终调用最新版本）
       if (currentStatus === "active") {
-        execRef.current(text);
+        executeCommand(text);
       }
     };
 
@@ -270,7 +321,7 @@ export default function App() {
     }
   }, [startOnce, setSpeechReady, setStatus, status]);
 
-  // ===== 渲染 =====
+  // ========== 渲染 ==========
   const showCanvas = status === "active" && canvasConfig !== null;
 
   return (
@@ -388,7 +439,9 @@ export default function App() {
                               ? "text-green-400"
                               : log.includes("取消")
                                 ? "text-yellow-400"
-                                : "text-gray-500"
+                                : log.includes("放大") || log.includes("缩小") || log.includes("适应") || log.includes("原始")
+                                  ? "text-purple-400"
+                                  : "text-gray-500"
             }`}
           >
             {log}

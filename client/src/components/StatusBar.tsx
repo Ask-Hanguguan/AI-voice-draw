@@ -5,6 +5,8 @@ export default function StatusBar() {
   const status = useAppStore((s) => s.status);
   const lastFeedbackType = useAppStore((s) => s.lastFeedbackType);
   const lastFeedbackMessage = useAppStore((s) => s.lastFeedbackMessage);
+  const zoomLevel = useAppStore((s) => s.zoomLevel);
+  const canvasConfig = useAppStore((s) => s.canvasConfig);
 
   const feedbackColor =
     lastFeedbackType === "success"
@@ -59,7 +61,6 @@ export default function StatusBar() {
         ) : (
           <span className="text-gray-600">等待指令...</span>
         )}
-        {/* F002: 语音反馈气泡 */}
         {lastFeedbackMessage && (
           <span
             className={`text-xs px-2 py-0.5 rounded-full border ${feedbackColor} max-w-sm truncate`}
@@ -69,8 +70,15 @@ export default function StatusBar() {
         )}
       </div>
 
-      {/* 右侧：退出提示 */}
-      <div className="text-gray-500 text-xs">说"退出" 休眠</div>
+      {/* 右侧：F005 缩放 + 退出提示 */}
+      <div className="flex items-center gap-3 text-xs">
+        {canvasConfig && status === "active" && (
+          <span className="text-gray-400 bg-gray-800 px-2 py-0.5 rounded">
+            🔍 {Math.round(zoomLevel * 100)}%
+          </span>
+        )}
+        <span className="text-gray-500">说"退出" 休眠</span>
+      </div>
     </div>
   );
 }

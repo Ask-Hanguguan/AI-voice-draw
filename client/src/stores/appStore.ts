@@ -31,6 +31,9 @@ interface AppState {
   /* 待确认操作 */
   pendingConfirm: PendingConfirm | null;
 
+  /* F005: 画布缩放级别 (0.1~5.0, 默认 1) */
+  zoomLevel: number;
+
   setStatus: (status: AppStatus) => void;
   setLastRecognizedText: (text: string) => void;
   setSpeechReady: (ready: boolean) => void;
@@ -41,6 +44,8 @@ interface AppState {
   setHasUnsavedContent: (hasContent: boolean) => void;
 
   setPendingConfirm: (pending: PendingConfirm | null) => void;
+
+  setZoomLevel: (zoom: number) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -56,6 +61,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   pendingConfirm: null,
 
+  zoomLevel: 1,
+
   setStatus: (status) => set({ status }),
   setLastRecognizedText: (text) => set({ lastRecognizedText: text }),
   setSpeechReady: (ready) => set({ speechReady: ready }),
@@ -68,4 +75,6 @@ export const useAppStore = create<AppState>((set) => ({
   setHasUnsavedContent: (hasContent) => set({ hasUnsavedContent: hasContent }),
 
   setPendingConfirm: (pending) => set({ pendingConfirm: pending }),
+
+  setZoomLevel: (zoom) => set({ zoomLevel: zoom }),
 }));
