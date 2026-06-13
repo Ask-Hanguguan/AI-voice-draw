@@ -106,6 +106,11 @@ class VoiceFeedbackService {
     this.success("绘制三角形");
   }
 
+  // F010: 画笔颜色
+  brushColor(colorName: string): void {
+    this.success(`画笔已换成${colorName}`);
+  }
+
   stop(): void { ttsService.stop(); }
 }
 
