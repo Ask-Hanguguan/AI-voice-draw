@@ -262,6 +262,25 @@ class CanvasManager {
     );
   }
 
+  // ========== F015: 删除最近绘制的图形 ==========
+
+  deleteLast(): boolean {
+    if (!this.canvas) return false;
+    const objs = this.canvas.getObjects();
+    // 倒序遍历，跳过网格线（selectable=false 且 evented=false）
+    for (let i = objs.length - 1; i >= 0; i--) {
+      const obj = objs[i];
+      if (obj.selectable !== false || obj.evented !== false) {
+        this.canvas.remove(obj);
+        this.renderCanvas();
+        this.saveSnapshot();
+        console.log("[Canvas] 已删除最近图形，剩余对象数:", this.canvas.getObjects().length);
+        return true;
+      }
+    }
+    return false;
+  }
+
   getSize(): { width: number; height: number } | null {
     if (!this.canvas) return null;
     return { width: this.logicalWidth, height: this.logicalHeight };

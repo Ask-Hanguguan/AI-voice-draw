@@ -16,6 +16,7 @@ export type CommandType =
   | "draw_rectangle"
   | "draw_triangle"
   | "brush_color"
+  | "delete_shape"
   | "unrecognized";
 
 export interface Command {
@@ -119,6 +120,18 @@ const rules: Rule[] = [
       /打开.*画[布板面]/, /新.*画[布板面]/, /建.*画[布板面]/, /新建/,
     ],
     extractParams: () => ({ ...CANVAS_SIZES.default }),
+  },
+
+  // ---- F015: 删除最近绘制的图形 ----
+  {
+    type: "delete_shape",
+    patterns: [
+      /删除.*(?:图形|这个|那个|最后|上一[个些]|对象)/,
+      /(?:删掉|去掉).*(?:图形|这个|那个|最后|上一[个些]|对象)/,
+      /擦掉.*(?:这个|那个|最后|图形|对象)/,
+      /^删[除掉]$/,
+      /^去掉$/,
+    ],
   },
 
   // ---- 清空画布 ----

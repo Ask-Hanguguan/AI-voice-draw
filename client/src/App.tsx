@@ -318,6 +318,21 @@ export default function App() {
         break;
       }
 
+      // ---- F015: 删除最近绘制的图形 ----
+      case "delete_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (canvasManager.deleteLast()) {
+          voiceFeedback.deleteShape();
+          addLog("已删除最近图形");
+        } else {
+          voiceFeedback.info("画布上没有可删除的图形");
+        }
+        break;
+      }
+
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;
