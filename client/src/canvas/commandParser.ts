@@ -15,6 +15,7 @@ export type CommandType =
   | "draw_circle"
   | "draw_rectangle"
   | "draw_triangle"
+  | "brush_color"
   | "unrecognized";
 
 export interface Command {
@@ -172,6 +173,37 @@ const rules: Rule[] = [
   },
 ];
 
+// ========== F010: 画笔颜色映射 ==========
+const COLOR_MAP: Record<string, { name: string; hex: string }> = {
+  "红": { name: "红色", hex: "#FF0000" },
+  "红色": { name: "红色", hex: "#FF0000" },
+  "橙": { name: "橙色", hex: "#FF8800" },
+  "橙色": { name: "橙色", hex: "#FF8800" },
+  "橘": { name: "橙色", hex: "#FF8800" },
+  "橘色": { name: "橙色", hex: "#FF8800" },
+  "黄": { name: "黄色", hex: "#FFDD00" },
+  "黄色": { name: "黄色", hex: "#FFDD00" },
+  "绿": { name: "绿色", hex: "#00CC00" },
+  "绿色": { name: "绿色", hex: "#00CC00" },
+  "蓝": { name: "蓝色", hex: "#0066FF" },
+  "蓝色": { name: "蓝色", hex: "#0066FF" },
+  "紫": { name: "紫色", hex: "#8800CC" },
+  "紫色": { name: "紫色", hex: "#8800CC" },
+  "黑": { name: "黑色", hex: "#000000" },
+  "黑色": { name: "黑色", hex: "#000000" },
+  "白": { name: "白色", hex: "#FFFFFF" },
+  "白色": { name: "白色", hex: "#FFFFFF" },
+};
+
+function extractColor(text: string): { name: string; hex: string } | null {
+  // 按 key 长度降序排列，优先匹配更长的 key（如"橙色"优先于"橙"）
+  const keys = Object.keys(COLOR_MAP).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    if (text.includes(key)) return COLOR_MAP[key];
+  }
+  return null;
+}
+
 // ========== F006~F009: 绘图规则 ==========
 const drawRules: Rule[] = [
   // ---- F006: 绘制直线 ----
@@ -251,6 +283,34 @@ const drawRules: Rule[] = [
         side,
         isEquilateral,
       };
+    },
+  },
+  // ---- F010: 画笔颜色 ----
+  {
+    type: "brush_color",
+    patterns: [
+      /画笔.*(?:换|改|变|设|选|用).*/,
+      /(?:换|改|变|设|选|用).*颜色/,
+      /颜色.*(?:换|改|变|设|选)/,
+      /画笔.*颜色/,
+    ],
+    extractParams: (_match, text) => {
+      const color = extractColor(text);
+      return color ? { color: color.hex, colorName: color.name } : {};
+    },
+  },
+  {
+    type: "brush_color",
+    patterns: [
+      /(?:红|橙|黄|绿|蓝|紫|黑|白)色.*画/,
+      /(?:红|橙|黄|绿|蓝|紫|黑|白)色.*笔/,
+      /画.*(?:红|橙|黄|绿|蓝|紫|黑|白)色/,
+      /用(?:红|橙|黄|绿|蓝|紫|黑|白)色/,
+      /改成(?:红|橙|黄|绿|蓝|紫|黑|白)/,
+    ],
+    extractParams: (_match, text) => {
+      const color = extractColor(text);
+      return color ? { color: color.hex, colorName: color.name } : {};
     },
   },
 ];

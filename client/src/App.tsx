@@ -303,6 +303,21 @@ export default function App() {
         addLog(`绘制${tIsEquilateral ? "等边" : ""}三角形 side=${tSide}`);
         break;
       }
+
+      // ---- F010: 画笔颜色 ----
+      case "brush_color": {
+        const hex = cmd.params.color as string | undefined;
+        const name = cmd.params.colorName as string | undefined;
+        if (!hex) {
+          voiceFeedback.guidance("请指定画笔颜色，比如红色、蓝色、绿色");
+          return;
+        }
+        store.setBrushColor(hex);
+        voiceFeedback.brushColor(name || hex);
+        addLog(`画笔颜色 → ${name || hex}`);
+        break;
+      }
+
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;
