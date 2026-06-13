@@ -111,6 +111,11 @@ class VoiceFeedbackService {
     this.success(`画笔已换成${colorName}`);
   }
 
+  // F012: 填充与描边
+  fillMode(desc: string): void {
+    this.success(desc);
+  }
+
   stop(): void { ttsService.stop(); }
 }
 

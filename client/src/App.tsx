@@ -318,6 +318,32 @@ export default function App() {
         break;
       }
 
+      // ---- F012: 填充与描边 ----
+      case "fill_mode": {
+        const mode = cmd.params.mode as string;
+
+        if (mode === "fill_color") {
+          const color = cmd.params.color as string | undefined;
+          const colorName = cmd.params.colorName as string | undefined;
+          if (!color) {
+            voiceFeedback.guidance("请指定填充颜色，比如填充红色、填充蓝色");
+            return;
+          }
+          store.setBrushFill(color);
+          voiceFeedback.fillMode(`填充已换成${colorName || color}`);
+          addLog(`填充颜色 → ${colorName || color}`);
+        } else if (mode === "outline") {
+          store.setBrushFill("none");
+          voiceFeedback.fillMode("已切换为轮廓模式，只显示描边");
+          addLog("填充模式 → 仅轮廓");
+        } else if (mode === "default") {
+          store.setBrushFill("");
+          voiceFeedback.fillMode("已恢复默认填充");
+          addLog("填充模式 → 默认填充");
+        }
+        break;
+      }
+
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;

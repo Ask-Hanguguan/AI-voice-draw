@@ -286,7 +286,7 @@ class CanvasManager {
       selectable: false,
       evented: true,
     };
-    opts.fill = s.fill && s.fill !== "" ? s.fill : "rgba(255,0,0,0.15)";
+    opts.fill = s.fill === "none" ? "" : (s.fill && s.fill !== "" ? s.fill : "rgba(255,0,0,0.15)");
     return opts;
   }
 
