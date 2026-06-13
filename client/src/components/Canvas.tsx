@@ -1,26 +1,40 @@
-﻿import { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { canvasManager } from "../canvas/canvasManager";
 
 interface Props {
   width: number;
   height: number;
+  canvasKey: number;
 }
 
-export default function Canvas({ width, height }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
+export default function Canvas({ width, height, canvasKey }: Props) {
   const canvasElRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!canvasElRef.current) return;
-    canvasManager.create(canvasElRef.current, { width, height });
+    const el = canvasElRef.current;
+    if (!el) return;
+
+    // 如果 canvasManager 已有画布且绑定在同一个 DOM 元素上 → 只更新尺寸
+    if (canvasManager.canvas && canvasManager.isBoundTo(el)) {
+      canvasManager.canvas.setDimensions(
+        { width, height },
+        { cssOnly: false }
+      );
+      canvasManager.canvas.renderAll();
+      return;
+    }
+
+    // 需要创建新画布
+    console.log("[Canvas] 创建 Fabric 画布", width, "x", height);
+    canvasManager.create(el, { width, height });
+
     return () => {
       canvasManager.destroy();
     };
-  }, [width, height]);
+  }, [width, height, canvasKey]);
 
   return (
     <div
-      ref={containerRef}
       id="canvas-container"
       className="flex-1 flex items-center justify-center bg-gray-900 p-4 overflow-auto"
     >
@@ -39,7 +53,7 @@ export default function Canvas({ width, height }: Props) {
           id="drawing-canvas"
           width={width}
           height={height}
-          style={{ display: "block", background: "#ffffff" }}
+          style={{ display: "block" }}
         />
       </div>
     </div>

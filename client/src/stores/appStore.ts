@@ -34,6 +34,11 @@ interface AppState {
   /* F005: 画布缩放级别 (0.1~5.0, 默认 1) */
   zoomLevel: number;
 
+  /* F006~F009: 画笔样式 */
+  brushColor: string;
+  brushStrokeWidth: number;
+  brushFill: string;
+
   setStatus: (status: AppStatus) => void;
   setLastRecognizedText: (text: string) => void;
   setSpeechReady: (ready: boolean) => void;
@@ -46,9 +51,14 @@ interface AppState {
   setPendingConfirm: (pending: PendingConfirm | null) => void;
 
   setZoomLevel: (zoom: number) => void;
+
+  setBrushColor: (color: string) => void;
+  setBrushStrokeWidth: (width: number) => void;
+  setBrushFill: (fill: string) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
+
   status: "idle",
   lastRecognizedText: "",
   speechReady: false,
@@ -62,6 +72,10 @@ export const useAppStore = create<AppState>((set) => ({
   pendingConfirm: null,
 
   zoomLevel: 1,
+
+  brushColor: "#000000",
+  brushStrokeWidth: 3,
+  brushFill: "",
 
   setStatus: (status) => set({ status }),
   setLastRecognizedText: (text) => set({ lastRecognizedText: text }),
@@ -77,4 +91,10 @@ export const useAppStore = create<AppState>((set) => ({
   setPendingConfirm: (pending) => set({ pendingConfirm: pending }),
 
   setZoomLevel: (zoom) => set({ zoomLevel: zoom }),
+
+  setBrushColor: (color) => set({ brushColor: color }),
+  setBrushStrokeWidth: (width) => set({ brushStrokeWidth: width }),
+  setBrushFill: (fill) => set({ brushFill: fill }),
 }));
+
+(window as any).__store = useAppStore;

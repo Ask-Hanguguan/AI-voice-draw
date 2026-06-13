@@ -89,6 +89,23 @@ class VoiceFeedbackService {
     this.success(`适应屏幕，${pct}%`);
   }
 
+  // F006~F009: 绘图反馈
+  needCanvas(): void {
+    this.guidance("请先新建画布");
+  }
+  drawLine(): void {
+    this.success("绘制直线");
+  }
+  drawCircle(): void {
+    this.success("绘制圆形");
+  }
+  drawRectangle(): void {
+    this.success("绘制矩形");
+  }
+  drawTriangle(): void {
+    this.success("绘制三角形");
+  }
+
   stop(): void { ttsService.stop(); }
 }
 
