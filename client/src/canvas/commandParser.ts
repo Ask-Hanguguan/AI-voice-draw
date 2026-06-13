@@ -11,6 +11,10 @@ export type CommandType =
   | "canvas_zoom_out"
   | "canvas_zoom_reset"
   | "canvas_zoom_fit"
+  | "draw_line"
+  | "draw_circle"
+  | "draw_rectangle"
+  | "draw_triangle"
   | "unrecognized";
 
 export interface Command {
@@ -25,6 +29,61 @@ const CANVAS_SIZES: Record<string, { width: number; height: number }> = {
   a4: { width: 794, height: 1123 },
   square: { width: 800, height: 800 },
 };
+
+// ========== F006~F009: 位置映射 ==========
+const POSITION_AREAS: Record<string, { x: number; y: number }> = {
+  "左上角": { x: 0.2, y: 0.2 },
+  "右上角": { x: 0.8, y: 0.2 },
+  "左下角": { x: 0.2, y: 0.8 },
+  "右下角": { x: 0.8, y: 0.8 },
+  "中间": { x: 0.5, y: 0.5 },
+  "中心": { x: 0.5, y: 0.5 },
+  "上方": { x: 0.5, y: 0.15 },
+  "上面": { x: 0.5, y: 0.15 },
+  "下方": { x: 0.5, y: 0.85 },
+  "下面": { x: 0.5, y: 0.85 },
+  "左方": { x: 0.15, y: 0.5 },
+  "左边": { x: 0.15, y: 0.5 },
+  "左面": { x: 0.15, y: 0.5 },
+  "右方": { x: 0.85, y: 0.5 },
+  "右边": { x: 0.85, y: 0.5 },
+  "右面": { x: 0.85, y: 0.5 },
+};
+
+// 大小映射 (半径)
+const SIZE_MAP: Record<string, number> = {
+  "大": 100,
+  "大的": 100,
+  "中": 50,
+  "中等": 50,
+  "小": 25,
+  "小的": 25,
+};
+
+// 辅助：提取位置参数
+function extractPosition(text: string): { x: number; y: number } | null {
+  for (const [key, area] of Object.entries(POSITION_AREAS)) {
+    if (text.includes(key)) return { ...area };
+  }
+  return null;
+}
+
+// 辅助：提取大小参数
+function extractSize(text: string): number | null {
+  for (const [key, size] of Object.entries(SIZE_MAP)) {
+    if (text.includes(key)) return size;
+  }
+  return null;
+}
+
+// 辅助：提取数值参数 (如 半径50, 宽100, 高200, 边长80)
+function extractNumeric(text: string, keywords: string[]): number | null {
+  for (const kw of keywords) {
+    const m = text.match(new RegExp(kw + "(\\d+)"));
+    if (m) return parseInt(m[1], 10);
+  }
+  return null;
+}
 
 // ========== 指令规则表 ==========
 
@@ -113,11 +172,106 @@ const rules: Rule[] = [
   },
 ];
 
+// ========== F006~F009: 绘图规则 ==========
+const drawRules: Rule[] = [
+  // ---- F006: 绘制直线 ----
+  {
+    type: "draw_line",
+    patterns: [
+      /画.*直?线/, /绘.*直?线/, /画.*一[条根串].*线/,
+      /添加.*直?线/, /加.*直?线/,
+    ],
+    extractParams: (_match, text) => {
+      const pos = extractPosition(text);
+      const size = extractSize(text);
+      const length = extractNumeric(text, ["长度", "长"]);
+      return { position: pos, size, length };
+    },
+  },
+  // ---- F007: 绘制圆形 ----
+  {
+    type: "draw_circle",
+    patterns: [
+      /画.*(?:椭?圆|正圆)/, /绘.*(?:椭?圆|正圆)/,
+      /画.*一[个].*(?:圆|圈)/, /添加.*(?:圆|圈)/,
+      /加.*(?:圆|圈)/,
+    ],
+    extractParams: (_match, text) => {
+      const pos = extractPosition(text);
+      const sizeKey = extractSize(text);
+      const radius = extractNumeric(text, ["半径"]);
+      const isEllipse = text.includes("椭");
+      return {
+        position: pos,
+        size: sizeKey,
+        radius,
+        isEllipse,
+      };
+    },
+  },
+  // ---- F008: 绘制矩形 ----
+  {
+    type: "draw_rectangle",
+    patterns: [
+      /画.*(?:矩形|长方形|正方形|方框|方块)/, /绘.*(?:矩形|长方形|正方形|方框|方块)/,
+      /画.*一[个].*(?:矩形|长方形|正方形|方框)/,
+      /添加.*(?:矩形|长方形|正方形|方框)/, /加.*(?:矩形|长方形|正方形|方框)/,
+    ],
+    extractParams: (_match, text) => {
+      const pos = extractPosition(text);
+      const sizeKey = extractSize(text);
+      const width = extractNumeric(text, ["宽度", "宽"]);
+      const height = extractNumeric(text, ["高度", "高"]);
+      const isSquare = text.includes("正方") || text.includes("方框") || text.includes("方块");
+      return {
+        position: pos,
+        size: sizeKey,
+        width,
+        height,
+        isSquare,
+      };
+    },
+  },
+  // ---- F009: 绘制三角形 ----
+  {
+    type: "draw_triangle",
+    patterns: [
+      /画.*三角[形]?/, /绘.*三角[形]?/,
+      /画.*一[个].*三角[形]?/,
+      /添加.*三角[形]?/, /加.*三角[形]?/,
+    ],
+    extractParams: (_match, text) => {
+      const pos = extractPosition(text);
+      const sizeKey = extractSize(text);
+      const side = extractNumeric(text, ["边长"]);
+      const isEquilateral = text.includes("等边") || text.includes("正三角");
+      return {
+        position: pos,
+        size: sizeKey,
+        side,
+        isEquilateral,
+      };
+    },
+  },
+];
+
 // ========== 解析入口 ==========
 
 export function parseCommand(text: string): Command {
   const cleaned = text.replace(/[，。！？,!? ]/g, "");
 
+  // 先匹配绘图指令
+  for (const rule of drawRules) {
+    for (const pattern of rule.patterns) {
+      const match = cleaned.match(pattern);
+      if (match) {
+        const params = rule.extractParams ? rule.extractParams(match, text) : {};
+        return { type: rule.type, params, raw: text };
+      }
+    }
+  }
+
+  // 再匹配其他指令
   for (const rule of rules) {
     for (const pattern of rule.patterns) {
       const match = cleaned.match(pattern);

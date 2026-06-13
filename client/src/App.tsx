@@ -218,6 +218,89 @@ export default function App() {
         break;
       }
 
+
+      // ---- F006: 绘制直线 ----
+      case "draw_line": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const size = canvasManager.getSize()!;
+        const pos = cmd.params.position as { x: number; y: number } | null;
+        const lineSize = (cmd.params.size as number) || (cmd.params.length as number) || 100;
+        const cx = pos ? pos.x * size.width : size.width / 2;
+        const cy = pos ? pos.y * size.height : size.height / 2;
+        const angle = pos ? 0 : -45;
+        const rad = (angle * Math.PI) / 180;
+        const halfLen = lineSize / 2;
+        const x1 = cx - halfLen * Math.cos(rad);
+        const y1 = cy - halfLen * Math.sin(rad);
+        const x2 = cx + halfLen * Math.cos(rad);
+        const y2 = cy + halfLen * Math.sin(rad);
+        canvasManager.drawLine(x1, y1, x2, y2);
+        voiceFeedback.drawLine();
+        addLog("绘制直线");
+        break;
+      }
+
+      // ---- F007: 绘制圆形 ----
+      case "draw_circle": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const cSize = canvasManager.getSize()!;
+        const cPos = cmd.params.position as { x: number; y: number } | null;
+        const cRadius = (cmd.params.radius as number) || (cmd.params.size as number) || 50;
+        const cIsEllipse = (cmd.params.isEllipse as boolean) || false;
+        const ccx = cPos ? cPos.x * cSize.width : cSize.width / 2;
+        const ccy = cPos ? cPos.y * cSize.height : cSize.height / 2;
+        canvasManager.drawCircle(ccx, ccy, cRadius, cIsEllipse);
+        voiceFeedback.drawCircle();
+        addLog(`绘制${cIsEllipse ? "椭圆" : "圆形"} r=${cRadius}`);
+        break;
+      }
+
+      // ---- F008: 绘制矩形 ----
+      case "draw_rectangle": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const rSize = canvasManager.getSize()!;
+        const rPos = cmd.params.position as { x: number; y: number } | null;
+        const rIsSquare = (cmd.params.isSquare as boolean) || false;
+        const rWidth = rIsSquare
+          ? ((cmd.params.width as number) || (cmd.params.size as number) || 100)
+          : ((cmd.params.width as number) || (cmd.params.size as number) || 150);
+        const rHeight = rIsSquare
+          ? rWidth
+          : ((cmd.params.height as number) || (cmd.params.size as number) || 100);
+        const rLeft = rPos ? rPos.x * rSize.width - rWidth / 2 : (rSize.width - rWidth) / 2;
+        const rTop = rPos ? rPos.y * rSize.height - rHeight / 2 : (rSize.height - rHeight) / 2;
+        canvasManager.drawRect(rLeft, rTop, rWidth, rHeight);
+        voiceFeedback.drawRectangle();
+        addLog(`绘制${rIsSquare ? "正方形" : "矩形"} ${rWidth}x${rHeight}`);
+        break;
+      }
+
+      // ---- F009: 绘制三角形 ----
+      case "draw_triangle": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const tSize = canvasManager.getSize()!;
+        const tPos = cmd.params.position as { x: number; y: number } | null;
+        const tIsEquilateral = (cmd.params.isEquilateral as boolean) !== false;
+        const tSide = (cmd.params.side as number) || (cmd.params.size as number) || 80;
+        const tCx = tPos ? tPos.x * tSize.width : tSize.width / 2;
+        const tCy = tPos ? tPos.y * tSize.height : tSize.height / 2;
+        canvasManager.drawTriangle(tCx, tCy, tSide, tIsEquilateral);
+        voiceFeedback.drawTriangle();
+        addLog(`绘制${tIsEquilateral ? "等边" : ""}三角形 side=${tSide}`);
+        break;
+      }
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;
@@ -439,7 +522,7 @@ export default function App() {
                               ? "text-green-400"
                               : log.includes("取消")
                                 ? "text-yellow-400"
-                                : log.includes("放大") || log.includes("缩小") || log.includes("适应") || log.includes("原始")
+                                : log.includes("放大") || log.includes("缩小") || log.includes("适应") || log.includes("原始") || log.includes("绘制")
                                   ? "text-purple-400"
                                   : "text-gray-500"
             }`}

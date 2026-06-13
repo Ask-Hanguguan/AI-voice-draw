@@ -12,11 +12,24 @@ export default function Canvas({ width, height }: Props) {
 
   useEffect(() => {
     if (!canvasElRef.current) return;
-    canvasManager.create(canvasElRef.current, { width, height });
-    return () => {
-      canvasManager.destroy();
-    };
+    // 幂等创建：如果 canvasManager 已有画布且对应同一 DOM 元素，跳过
+    if (!canvasManager.canvas) {
+      canvasManager.create(canvasElRef.current, { width, height });
+    }
+    // 不返回 cleanup — StrictMode 的 cleanup→remount 会破坏 Fabric.js
+    // canvasManager 的 dispose 由 usesDestroyed 信号量控制
   }, [width, height]);
+
+  // 真正的卸载清理
+  useEffect(() => {
+    let disposed = false;
+    return () => {
+      if (!disposed) {
+        disposed = true;
+        canvasManager.destroy();
+      }
+    };
+  }, []);
 
   return (
     <div
