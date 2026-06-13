@@ -30,6 +30,7 @@ export default function App() {
 
   const [logs, setLogs] = useState<string[]>([]);
   const [lastText, setLastText] = useState("");
+  const [canvasKey, setCanvasKey] = useState(0);
 
   const listeningRef = useRef(false);
   const statusRef = useRef(status);
@@ -104,6 +105,7 @@ export default function App() {
         }
         store.setCanvasConfig({ width: w, height: h });
         store.setZoomLevel(1);
+        setCanvasKey((k) => k + 1);
         voiceFeedback.success("新建画布");
         addLog(`新建画布 ${w}x${h}`);
         break;
@@ -412,7 +414,7 @@ export default function App() {
       {status !== "idle" && <StatusBar />}
 
       {showCanvas ? (
-        <Canvas width={canvasConfig!.width} height={canvasConfig!.height} />
+        <Canvas width={canvasConfig!.width} height={canvasConfig!.height} canvasKey={canvasKey} />
       ) : (
         <div
           className="flex-1 flex flex-col items-center justify-center cursor-pointer"

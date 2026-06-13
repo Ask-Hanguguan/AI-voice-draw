@@ -1,7 +1,7 @@
 ﻿// 画布管理器 — 封装 Fabric.js Canvas 生命周期
 // 负责创建、销毁、清空画布，撤销/恢复操作历史栈，视图缩放，以及基础绘图
 
-import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Polygon } from "fabric";
+import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle } from "fabric";
 import { useAppStore } from "../stores/appStore";
 
 export interface CanvasConfig {
@@ -34,21 +34,61 @@ class CanvasManager {
     return this.canvas !== null;
   }
 
+  /** 检查已有画布是否绑定在指定的 DOM 元素上（用于判断是否需要重新初始化） */
+  isBoundTo(el: HTMLCanvasElement): boolean {
+    if (!this.canvas) return false;
+    try {
+      const bound = (this.canvas as any).lowerCanvasEl ?? (this.canvas as any).getElement?.();
+      return bound === el;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 清理 canvas 元素上残留的旧 Fabric DOM 结构（HMR 后常见） */
+  private _cleanOrphanedFabricDOM(canvasEl: HTMLCanvasElement): void {
+    // 移除旧 Fabric 标记
+    canvasEl.removeAttribute("data-fabric");
+    canvasEl.classList.remove("lower-canvas", "upper-canvas");
+
+    // 如果 canvas 被包在旧 Fabric 容器里，把它移回原位置
+    const parent = canvasEl.parentElement;
+    if (parent?.hasAttribute?.("data-fabric")) {
+      const grandParent = parent.parentElement;
+      if (grandParent) {
+        grandParent.replaceChild(canvasEl, parent);
+      }
+    }
+
+    // 清理页面上所有孤儿 Fabric 容器（没有 canvas 子元素的旧容器）
+    document.querySelectorAll('[data-fabric="wrapper"]').forEach((w) => {
+      if (!(w as HTMLElement).querySelector?.("canvas")) {
+        w.remove();
+      }
+    });
+  }
+
   /** 创建画布 — 幂等：同一元素不重复创建 */
   create(el: HTMLCanvasElement | string, config?: Partial<CanvasConfig>): FabricCanvas {
     if (this.canvas) this.destroy();
+
+    // 清理可能残留的旧 Fabric DOM 结构（如 HMR 后残留的容器 div）
+    const canvasEl = typeof el === "string" ? document.getElementById(el) as HTMLCanvasElement : el;
+    if (canvasEl) {
+      this._cleanOrphanedFabricDOM(canvasEl);
+    }
 
     const { width = 800, height = 600, backgroundColor = "#ffffff" } = config ?? {};
     this.logicalWidth = width;
     this.logicalHeight = height;
 
     this.canvas = new FabricCanvas(el, {
-      renderOnAddRemove: true,
       width,
       height,
       backgroundColor,
       selection: false,
       preserveObjectStacking: true,
+      enableRetinaScaling: false,
     });
 
     this.undoStack = [];
@@ -57,14 +97,14 @@ class CanvasManager {
 
     // F005: 添加参考网格
     this.addGrid();
+
     this.saveSnapshot();
 
     this.zoomReset(); // 强制缩放1倍
-    setTimeout(() => this.canvas?.requestRenderAll(), 0);
+    this.canvas.requestRenderAll();
 
     console.log("[Canvas] 已创建", width, "x", height,
-      "对象数:", this.canvas.getObjects().length,
-      "contextId:", (this.canvas as any).contextContainer?.canvas?.id);
+      "对象数:", this.canvas.getObjects().length);
     return this.canvas;
 
   }
@@ -241,13 +281,18 @@ class CanvasManager {
   private shapeOpts(): Record<string, unknown> {
     const s = this.getBrushStyle();
     const opts: Record<string, unknown> = {
-      stroke: s.color,
-      strokeWidth: s.strokeWidth,
+      stroke: s.color || "#000000",
+      strokeWidth: s.strokeWidth || 3,
       selectable: false,
       evented: true,
     };
-    opts.fill = s.fill && s.fill !== "" ? s.fill : null;
+    opts.fill = s.fill && s.fill !== "" ? s.fill : "rgba(255,0,0,0.15)";
     return opts;
+  }
+
+  private renderCanvas(): void {
+    if (!this.canvas) return;
+    this.canvas.renderAll();
   }
 
   // ========== F006: 绘制直线 ==========
@@ -255,13 +300,14 @@ class CanvasManager {
   drawLine(x1: number, y1: number, x2: number, y2: number): void {
     if (!this.canvas) return;
     const line = new Line([x1, y1, x2, y2], {
-      stroke: this.getBrushStyle().color,
-      strokeWidth: this.getBrushStyle().strokeWidth,
+      stroke: this.getBrushStyle().color || "#000000",
+      strokeWidth: this.getBrushStyle().strokeWidth || 3,
       selectable: false,
       evented: true,
+      strokeLineCap: "round",
     });
     this.canvas.add(line);
-    this.canvas.renderAll();
+    this.renderCanvas();
     console.log("[Canvas] 直线已添加，对象数:", this.canvas.getObjects().length);
     this.saveSnapshot();
   }
@@ -282,7 +328,7 @@ class CanvasManager {
         left: cx - radius, top: cy - radius, radius, ...opts,
       }));
     }
-    this.canvas.renderAll();
+    this.renderCanvas();
     console.log("[Canvas] 圆已添加，对象数:", this.canvas.getObjects().length);
     this.saveSnapshot();
   }
@@ -291,10 +337,19 @@ class CanvasManager {
 
   drawRect(left: number, top: number, width: number, height: number): void {
     if (!this.canvas) return;
-    this.canvas.add(new Rect({
-      left, top, width, height, ...this.shapeOpts(),
-    }));
-    this.canvas.renderAll();
+    const opts = this.shapeOpts();
+    const rect = new Rect({
+      left,
+      top,
+      width,
+      height,
+      originX: "left",
+      originY: "top",
+      ...opts,
+    });
+    this.canvas.add(rect);
+    rect.setCoords();
+    this.renderCanvas();
     console.log("[Canvas] 矩形已添加，对象数:", this.canvas.getObjects().length);
     this.saveSnapshot();
   }
@@ -303,23 +358,19 @@ class CanvasManager {
 
   drawTriangle(cx: number, cy: number, size: number, isEquilateral = true): void {
     if (!this.canvas) return;
-    let points: { x: number; y: number }[];
-    if (isEquilateral) {
-      const h = (Math.sqrt(3) / 2) * size;
-      points = [
-        { x: cx, y: cy - h * 0.6 },
-        { x: cx - size / 2, y: cy + h * 0.4 },
-        { x: cx + size / 2, y: cy + h * 0.4 },
-      ];
-    } else {
-      points = [
-        { x: cx - size / 2, y: cy + size / 2 },
-        { x: cx - size / 2, y: cy - size / 2 },
-        { x: cx + size / 2, y: cy + size / 2 },
-      ];
-    }
-    this.canvas.add(new Polygon(points, this.shapeOpts()));
-    this.canvas.renderAll();
+    const opts = this.shapeOpts();
+    const height = isEquilateral ? (Math.sqrt(3) / 2) * size : size;
+    const triangle = new Triangle({
+      left: cx,
+      top: cy,
+      originX: "center",
+      originY: "center",
+      width: size,
+      height,
+      ...opts,
+    });
+    this.canvas.add(triangle);
+    this.renderCanvas();
     console.log("[Canvas] 三角形已添加，对象数:", this.canvas.getObjects().length);
     this.saveSnapshot();
   }
