@@ -318,6 +318,40 @@ export default function App() {
         break;
       }
 
+      // ---- F017: 自定义画布尺寸 ----
+      case "canvas_resize": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const rw = cmd.params.width as number | undefined;
+        const rh = cmd.params.height as number | undefined;
+        if (!rw || !rh || rw < 200 || rh < 200 || rw > 4000 || rh > 4000) {
+          voiceFeedback.guidance("请指定有效的画布尺寸，比如宽800高600，最小200最大4000");
+          return;
+        }
+        canvasManager.resize(rw, rh);
+        store.setCanvasConfig({ width: rw, height: rh });
+        voiceFeedback.canvasResize(rw, rh);
+        addLog(`画布调整 → ${rw}x${rh}`);
+        break;
+      }
+
+      // ---- F018: 画布平移 ----
+      case "canvas_pan": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const dir = cmd.params.direction as string;
+        const amt = (cmd.params.amount as number) || 100;
+        canvasManager.pan(dir, amt);
+        const dirLabel: Record<string, string> = { up: "上", down: "下", left: "左", right: "右" };
+        voiceFeedback.canvasPan(dirLabel[dir] || dir, amt);
+        addLog(`画布平移 → ${dirLabel[dir] || dir} ${amt}px`);
+        break;
+      }
+
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;

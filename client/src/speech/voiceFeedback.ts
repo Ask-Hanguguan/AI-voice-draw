@@ -111,6 +111,16 @@ class VoiceFeedbackService {
     this.success(`画笔已换成${colorName}`);
   }
 
+  // F017: 自定义画布尺寸
+  canvasResize(w: number, h: number): void {
+    this.success(`画布已调整为宽${w}高${h}`);
+  }
+
+  // F018: 画布平移
+  canvasPan(direction: string, amount: number): void {
+    this.success(`画布向${direction}平移${amount}像素`);
+  }
+
   stop(): void { ttsService.stop(); }
 }
 
