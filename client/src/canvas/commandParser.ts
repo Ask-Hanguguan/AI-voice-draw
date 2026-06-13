@@ -16,6 +16,7 @@ export type CommandType =
   | "draw_rectangle"
   | "draw_triangle"
   | "brush_color"
+  | "brush_width"
   | "unrecognized";
 
 export interface Command {
@@ -312,6 +313,89 @@ const drawRules: Rule[] = [
       const color = extractColor(text);
       return color ? { color: color.hex, colorName: color.name } : {};
     },
+  },
+  // ---- F011: 画笔粗细 ----
+  {
+    type: "brush_width",
+    patterns: [
+      /粗细.*(\d+)/,
+      /画笔.*粗细.*(\d+)/,
+      /线条.*粗细.*(\d+)/,
+      /粗细.*改为?.*(\d+)/,
+    ],
+    extractParams: (match, _text) => {
+      const value = parseInt(match[1], 10);
+      return { mode: "absolute", value: Math.min(20, Math.max(1, value)) };
+    },
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /粗一[点些]/,
+      /加粗/,
+      /变粗/,
+      /更粗/,
+      /粗线/,
+    ],
+    extractParams: () => ({ mode: "relative", delta: 2 }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /细一[点些]/,
+      /变细/,
+      /更细/,
+      /细线/,
+    ],
+    extractParams: () => ({ mode: "relative", delta: -2 }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /最粗/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 20, label: "最粗" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /很粗/,
+      /非常粗/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 12, label: "很粗" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /很细/,
+      /非常细/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 1, label: "很细" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /粗/,
+      /加宽/,
+      /宽/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 8, label: "粗" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /细/,
+      /窄/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 2, label: "细" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /中等/,
+      /普通/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 4, label: "中等" }),
   },
 ];
 

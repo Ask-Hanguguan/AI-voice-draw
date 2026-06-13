@@ -318,6 +318,33 @@ export default function App() {
         break;
       }
 
+      // ---- F011: 画笔粗细 ----
+      case "brush_width": {
+        const mode = cmd.params.mode as string;
+        const currentWidth = store.brushStrokeWidth;
+
+        if (mode === "absolute") {
+          const value = cmd.params.value as number;
+          store.setBrushStrokeWidth(value);
+          voiceFeedback.brushWidth(`粗细改为 ${value} 像素`);
+          addLog(`画笔粗细 → ${value}px`);
+        } else if (mode === "relative") {
+          const delta = cmd.params.delta as number;
+          const newWidth = Math.min(20, Math.max(1, currentWidth + delta));
+          store.setBrushStrokeWidth(newWidth);
+          const desc = delta > 0 ? "加粗" : "变细";
+          voiceFeedback.brushWidth(`${desc}到 ${newWidth} 像素`);
+          addLog(`画笔粗细 → ${newWidth}px`);
+        } else if (mode === "preset") {
+          const value = cmd.params.value as number;
+          const label = cmd.params.label as string;
+          store.setBrushStrokeWidth(value);
+          voiceFeedback.brushWidth(`画笔已换成${label}，${value} 像素`);
+          addLog(`画笔粗细 → ${label} (${value}px)`);
+        }
+        break;
+      }
+
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;

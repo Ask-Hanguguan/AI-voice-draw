@@ -111,6 +111,11 @@ class VoiceFeedbackService {
     this.success(`画笔已换成${colorName}`);
   }
 
+  // F011: 画笔粗细
+  brushWidth(desc: string): void {
+    this.success(desc);
+  }
+
   stop(): void { ttsService.stop(); }
 }
 
