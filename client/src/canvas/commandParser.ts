@@ -16,6 +16,7 @@ export type CommandType =
   | "draw_rectangle"
   | "draw_triangle"
   | "brush_color"
+  | "save_image"
   | "unrecognized";
 
 export interface Command {
@@ -170,6 +171,19 @@ const rules: Rule[] = [
   {
     type: "redo",
     patterns: [/恢复/, /重[做建]/, /下一步/, /前[进移]/, /还[原回]撤/],
+  },
+
+  // ---- F016: 保存图片 ----
+  {
+    type: "save_image",
+    patterns: [
+      /保存.*(?:图片|图像|画[布板面]|为)/,
+      /导出.*(?:图片|图像|画[布板面]|PNG)/,
+      /存一[下个]/,
+      /下载.*(?:图片|图像|画[布板面])/,
+      /^保存$/,
+      /^导出$/,
+    ],
   },
 ];
 

@@ -111,6 +111,11 @@ class VoiceFeedbackService {
     this.success(`画笔已换成${colorName}`);
   }
 
+  // F016: 保存图片
+  saveImage(): void {
+    this.success("图片已保存");
+  }
+
   stop(): void { ttsService.stop(); }
 }
 
