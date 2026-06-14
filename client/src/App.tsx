@@ -437,6 +437,41 @@ export default function App() {
         break;
       }
 
+      // ---- F019: 绘制五角星 ----
+      case "draw_star": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const starSize = canvasManager.getSize()!;
+        const starPos = cmd.params.position as { x: number; y: number } | null;
+        const starR = (cmd.params.radius as number) || (cmd.params.size as number) || 60;
+        const scx = starPos ? starPos.x * starSize.width : starSize.width / 2;
+        const scy = starPos ? starPos.y * starSize.height : starSize.height / 2;
+        canvasManager.drawStar(scx, scy, starR);
+        voiceFeedback.drawStar();
+        addLog(`绘制五角星 r=${starR}`);
+        break;
+      }
+
+      // ---- F020: 绘制多边形 ----
+      case "draw_polygon": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const polySize = canvasManager.getSize()!;
+        const polyPos = cmd.params.position as { x: number; y: number } | null;
+        const polyR = (cmd.params.radius as number) || (cmd.params.size as number) || 60;
+        const polySides = (cmd.params.sides as number) || 6;
+        const pcx = polyPos ? polyPos.x * polySize.width : polySize.width / 2;
+        const pcy = polyPos ? polyPos.y * polySize.height : polySize.height / 2;
+        canvasManager.drawPolygon(pcx, pcy, polyR, polySides);
+        voiceFeedback.drawPolygon(polySides);
+        addLog(`绘制${polySides}边形 r=${polyR}`);
+        break;
+      }
+
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;

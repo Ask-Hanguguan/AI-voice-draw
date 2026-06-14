@@ -22,6 +22,8 @@ export type CommandType =
   | "save_image"
   | "canvas_resize"
   | "canvas_pan"
+  | "draw_star"
+  | "draw_polygon"
   | "unrecognized";
 
 export interface Command {
@@ -101,6 +103,22 @@ function extractDimensions(text: string): { width: number; height: number } | nu
   // 格式: 1024x768, 1024乘768, 1024*768
   const m = text.match(/(\d{3,4})\s*[x×乘\*]\s*(\d{3,4})/);
   if (m) return { width: parseInt(m[1], 10), height: parseInt(m[2], 10) };
+  return null;
+}
+
+// 辅助：提取中文数字表示的边数 (如 五边形→5, 六边形→6)
+const CN_SIDES: Record<string, number> = {
+  "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+};
+function extractSides(text: string): number | null {
+  // "正?N边形" / "正?N角形" 如 "五边形", "正六边形", "正五角形"
+  const m = text.match(/(三|四|五|六|七|八|九|十)边/);
+  if (m && m[1]) return CN_SIDES[m[1]] ?? null;
+  const m2 = text.match(/(三|四|五|六|七|八|九|十)角形/);
+  if (m2 && m2[1]) return CN_SIDES[m2[1]] ?? null;
+  // 阿拉伯数字: "3边形", "6边形"
+  const m3 = text.match(/(\d+)\s*边/);
+  if (m3) return parseInt(m3[1], 10);
   return null;
 }
 
@@ -417,6 +435,7 @@ const drawRules: Rule[] = [
       return color ? { color: color.hex, colorName: color.name } : {};
     },
   },
+<<<<<<< HEAD
   // ---- F011: 画笔粗细 ----
   {
     type: "brush_width",
@@ -535,6 +554,39 @@ const drawRules: Rule[] = [
       /需要填充/,
     ],
     extractParams: () => ({ mode: "default" }),
+=======
+  // ---- F019: 绘制五角星 ----
+  {
+    type: "draw_star",
+    patterns: [
+      /画.*(?:五角星|星星|星形)/, /绘.*(?:五角星|星星|星形)/,
+      /画.*一[个].*(?:五角星|星星|星形)/,
+      /添加.*(?:五角星|星星|星形)/, /加.*(?:五角星|星星|星形)/,
+    ],
+    extractParams: (_match, text) => {
+      const pos = extractPosition(text);
+      const sizeKey = extractSize(text);
+      const radius = extractNumeric(text, ["半径", "大小"]);
+      return { position: pos, size: sizeKey, radius };
+    },
+  },
+  // ---- F020: 绘制多边形 ----
+  {
+    type: "draw_polygon",
+    patterns: [
+      /画.*(?:正?多边[形]?|正?[三五六七八九十]边[形]?)/,
+      /绘.*(?:正?多边[形]?|正?[三五六七八九十]边[形]?)/,
+      /画.*一[个].*(?:多边[形]?|正?[三五六七八九十]边[形]?)/,
+      /添加.*(?:多边[形]?|正?[三五六七八九十]边[形]?)/,
+    ],
+    extractParams: (_match, text) => {
+      const pos = extractPosition(text);
+      const sizeKey = extractSize(text);
+      const radius = extractNumeric(text, ["半径", "大小"]);
+      const sides = extractSides(text);
+      return { position: pos, size: sizeKey, radius, sides };
+    },
+>>>>>>> feature/draw-star-polygon
   },
 ];
 
