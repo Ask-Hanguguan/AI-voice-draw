@@ -40,9 +40,10 @@ export default function App() {
   const restartCountRef = useRef(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [llmOnline, setLlmOnline] = useState(false);
+  const llmOnlineRef = useRef(false);
 
   useEffect(() => {
-    const check = () => { isLLMAvailable().then(setLlmOnline); };
+    const check = () => { isLLMAvailable().then((ok) => { llmOnlineRef.current = ok; setLlmOnline(ok); }); };
     check();
     const timer = setInterval(check, 30000);
     return () => clearInterval(timer);
@@ -482,7 +483,7 @@ export default function App() {
         break;
       }
       case "unrecognized": {
-        if (llmOnline) {
+        if (llmOnlineRef.current) {
           setIsProcessing(true);
           addLog("LLM: 请求中...");
           const origText = rawText || text;
@@ -941,10 +942,10 @@ export default function App() {
         break;
       }
       case "unrecognized": {
-        if (llmOnline) {
+        if (llmOnlineRef.current) {
           setIsProcessing(true);
           addLog("LLM: 请求中...");
-          const origText = rawText || text;
+          const origText = text;
           parseWithLLM(origText).then((llmResult) => {
             setIsProcessing(false);
             if (llmResult.type !== "unrecognized") {

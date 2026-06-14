@@ -638,6 +638,83 @@ const DRAWING_TRIGGERS = new Set([
  * 策略：包含任一触发词 → 可能是绘图指令
  * 准确率 ~85-90%，边界 case 由 LLM 兜底
  */
+
+// ========== 形状关键词分组（歧义检测用） ==========
+
+
+// ========== 复杂参数检测 ==========
+// 正则解析器无法处理的场景：中文数字、复合量词、复杂空间描述
+const CN_NUMBERS = /[零一二两三四五六七八九十百千万亿]/;
+const CN_UNITS = /[个条根道片块只张把根]/;
+const COMPLEX_DIRECTIONS = /[东南西北].*[东南西北]|斜|偏|往|朝|向/;
+
+/**
+ * 检测文本是否包含正则解析器无法充分处理的复杂参数
+ * 例如："两百像素"（中文数字）、"粗细适中"（模糊描述）
+ */
+function hasComplexParams(text: string): boolean {
+  // 所有形状关键词（用于排除"五角星""六边形"等形状名）
+  const allShapeKWs = Object.values(SHAPE_KEYWORD_GROUPS).flat();
+  
+  // 中文数字 + 非形状名、非冠词 → 参数复杂度高
+  if (CN_NUMBERS.test(text)) {
+    const numMatch = text.match(/[零一二两三四五六七八九十百千万亿]+/g);
+    if (numMatch) {
+      for (const m of numMatch) {
+        // 排除"一个"中的"一"（冠词，非参数）
+        if (m === "一" && /一个/.test(text)) continue;
+        // 排除形状名中的数字（五角星、六边形等）
+        if (allShapeKWs.some(kw => kw.includes(m))) continue;
+        // 确实是参数数字 → 复杂
+        return true;
+      }
+    }
+  }
+  // 复合方向描述（如"左上方偏右"）
+  if (COMPLEX_DIRECTIONS.test(text)) return true;
+  // 模糊量词（如"稍微大一点"、"差不多"）
+  if (/稍微|差不多|大概|左右|上下|适中|中等偏/.test(text)) return true;
+  return false;
+}
+
+const SHAPE_KEYWORD_GROUPS: Record<string, string[]> = {
+  draw_circle: ["圆", "圆形", "圆圈", "椭圆"],
+  draw_rectangle: ["矩形", "长方形", "方块", "方框", "正方形"],
+  draw_triangle: ["三角形", "三角"],
+  draw_star: ["五角星", "星星", "星形"],
+  draw_polygon: ["多边形", "六边形", "五边形", "八边形", "七边形"],
+  draw_line: ["直线", "线段", "线条"],
+};
+
+/**
+ * 检测形状歧义：文本是否同时匹配多种形状类型的特征词
+ * 如 "圆角矩形" 同时含 "圆"(circle) 和 "矩形"(rectangle)
+ * 返回 true 表示存在歧义，应交给 LLM 解析
+ */
+function hasShapeAmbiguity(text: string, matchedType: string): boolean {
+  // 复杂参数：正则无法充分解析 → 交给 LLM
+  if (hasComplexParams(text)) return true;
+  const matchedKeywords = SHAPE_KEYWORD_GROUPS[matchedType];
+  if (!matchedKeywords) return false;
+
+  for (const [type, keywords] of Object.entries(SHAPE_KEYWORD_GROUPS)) {
+    if (type === matchedType) continue;
+    // 检查文本是否包含其他形状的关键词
+    for (const kw of keywords) {
+      if (text.includes(kw)) {
+        // 但如果文本中的关键词是 matchedType 的超集则不歧义
+        // 例: "矩形" 匹配 draw_rectangle 且包含 "矩形" → 正常
+        const isMatchedKeyword = matchedKeywords.some(mk => text.includes(mk) && mk === kw);
+        if (!isMatchedKeyword) {
+          return true; // 歧义！
+        }
+      }
+    }
+  }
+  return false;
+}
+
+
 export function hasDrawingIntent(text: string): boolean {
   for (const trigger of DRAWING_TRIGGERS) {
     if (text.includes(trigger)) return true;
@@ -660,6 +737,10 @@ export function parseCommand(text: string): Command {
       const match = cleaned.match(pattern);
       if (match) {
         const params = rule.extractParams ? rule.extractParams(match, text) : {};
+        // 歧义检测：文本匹配多种形状特征词时交给 LLM
+        if (hasShapeAmbiguity(text, rule.type)) {
+          return { type: "unrecognized", params: {}, raw: text };
+        }
         return { type: rule.type, params, raw: text };
       }
     }
@@ -671,6 +752,10 @@ export function parseCommand(text: string): Command {
       const match = cleaned.match(pattern);
       if (match) {
         const params = rule.extractParams ? rule.extractParams(match, cleaned) : {};
+        // 歧义检测：文本匹配多种形状特征词时交给 LLM
+        if (hasShapeAmbiguity(text, rule.type)) {
+          return { type: "unrecognized", params: {}, raw: text };
+        }
         return {
           type: rule.type,
           params,
