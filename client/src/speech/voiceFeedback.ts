@@ -151,6 +151,10 @@ class VoiceFeedbackService {
     this.success(`绘制${sides}边形`);
   }
 
+  // F022: 虚线/点划线
+  lineStyle(desc: string): void {
+    this.success(desc);
+  }
   stop(): void { ttsService.stop(); }
 }
 

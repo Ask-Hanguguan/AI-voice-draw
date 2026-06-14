@@ -386,6 +386,25 @@ export default function App() {
         break;
       }
 
+      // ---- F022: 虚线/点划线 ----
+      case "line_style": {
+        const dashMode = cmd.params.mode as string;
+        if (dashMode === "dashed") {
+          store.setBrushDashArray([10, 6]);
+          voiceFeedback.lineStyle("已切换为虚线");
+          addLog("线条风格 → 虚线");
+        } else if (dashMode === "dotted") {
+          store.setBrushDashArray([3, 5]);
+          voiceFeedback.lineStyle("已切换为点划线");
+          addLog("线条风格 → 点划线");
+        } else {
+          store.setBrushDashArray([]);
+          voiceFeedback.lineStyle("已恢复实线");
+          addLog("线条风格 → 实线");
+        }
+        break;
+      }
+
       // ---- F016: 保存图片 ----
       case "save_image": {
         if (!canvasManager.exists()) {
@@ -471,7 +490,6 @@ export default function App() {
         addLog(`绘制${polySides}边形 r=${polyR}`);
         break;
       }
-
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;

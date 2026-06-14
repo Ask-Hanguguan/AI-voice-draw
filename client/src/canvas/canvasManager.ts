@@ -14,6 +14,7 @@ export interface BrushStyle {
   color: string;
   strokeWidth: number;
   fill: string;
+  dashArray: number[];
 }
 
 class CanvasManager {
@@ -350,6 +351,7 @@ class CanvasManager {
       color: store.brushColor,
       strokeWidth: store.brushStrokeWidth,
       fill: store.brushFill,
+      dashArray: store.brushDashArray,
     };
   }
 
@@ -362,6 +364,10 @@ class CanvasManager {
       evented: true,
     };
     opts.fill = s.fill === "none" ? "" : (s.fill && s.fill !== "" ? s.fill : "rgba(255,0,0,0.15)");
+    // F022: 虚线/点划线
+    if (s.dashArray && s.dashArray.length > 0) {
+      opts.strokeDashArray = s.dashArray;
+    }
     return opts;
   }
 
@@ -374,13 +380,19 @@ class CanvasManager {
 
   drawLine(x1: number, y1: number, x2: number, y2: number): void {
     if (!this.canvas) return;
-    const line = new Line([x1, y1, x2, y2], {
-      stroke: this.getBrushStyle().color || "#000000",
-      strokeWidth: this.getBrushStyle().strokeWidth || 3,
+    const style = this.getBrushStyle();
+    const lineOpts: Record<string, unknown> = {
+      stroke: style.color || "#000000",
+      strokeWidth: style.strokeWidth || 3,
       selectable: false,
       evented: true,
       strokeLineCap: "round",
-    });
+    };
+    // F022: 虚线/点划线
+    if (style.dashArray && style.dashArray.length > 0) {
+      lineOpts.strokeDashArray = style.dashArray;
+    }
+    const line = new Line([x1, y1, x2, y2], lineOpts);
     this.canvas.add(line);
     this.renderCanvas();
     console.log("[Canvas] 直线已添加，对象数:", this.canvas.getObjects().length);

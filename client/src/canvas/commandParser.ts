@@ -24,6 +24,7 @@ export type CommandType =
   | "canvas_pan"
   | "draw_star"
   | "draw_polygon"
+  | "line_style"
   | "unrecognized";
 
 export interface Command {
@@ -435,7 +436,6 @@ const drawRules: Rule[] = [
       return color ? { color: color.hex, colorName: color.name } : {};
     },
   },
-<<<<<<< HEAD
   // ---- F011: 画笔粗细 ----
   {
     type: "brush_width",
@@ -554,7 +554,7 @@ const drawRules: Rule[] = [
       /需要填充/,
     ],
     extractParams: () => ({ mode: "default" }),
-=======
+  },
   // ---- F019: 绘制五角星 ----
   {
     type: "draw_star",
@@ -586,7 +586,35 @@ const drawRules: Rule[] = [
       const sides = extractSides(text);
       return { position: pos, size: sizeKey, radius, sides };
     },
->>>>>>> feature/draw-star-polygon
+  },
+  // ---- F022: 虚线/点划线 ----
+  {
+    type: "line_style",
+    patterns: [
+      /虚线/,
+      /画虚/,
+    ],
+    extractParams: () => ({ mode: "dashed" }),
+  },
+  {
+    type: "line_style",
+    patterns: [
+      /点划/,
+      /点[虚断]/,
+      /点线/,
+    ],
+    extractParams: () => ({ mode: "dotted" }),
+  },
+  {
+    type: "line_style",
+    patterns: [
+      /实线/,
+      /恢复.*实线/,
+      /取消.*虚线/,
+      /取消.*点划/,
+      /取消.*点线/,
+    ],
+    extractParams: () => ({ mode: "solid" }),
   },
 ];
 
