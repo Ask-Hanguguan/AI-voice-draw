@@ -1,8 +1,11 @@
-﻿import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useAppStore } from "./stores/appStore";
 import { voiceFeedback } from "./speech/voiceFeedback";
 import { parseCommand } from "./canvas/commandParser";
 import { canvasManager } from "./canvas/canvasManager";
+import { parseWithLLM, isLLMAvailable } from "./api/commandClient";
+import { correctHotwords } from "./speech/hotwordCorrector";
+import type { Command } from "./canvas/commandParser";
 import StatusBar from "./components/StatusBar";
 import Canvas from "./components/Canvas";
 
@@ -35,6 +38,16 @@ export default function App() {
   const listeningRef = useRef(false);
   const statusRef = useRef(status);
   const restartCountRef = useRef(0);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [llmOnline, setLlmOnline] = useState(false);
+  const llmOnlineRef = useRef(false);
+
+  useEffect(() => {
+    const check = () => { isLLMAvailable().then((ok) => { llmOnlineRef.current = ok; setLlmOnline(ok); }); };
+    check();
+    const timer = setInterval(check, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   statusRef.current = status;
 
@@ -59,6 +72,572 @@ export default function App() {
     return false;
   }
 
+
+  // ========== LLM 结果直接执行（跳过解析和确认） ==========
+  function executeParsedDirect(cmd: Command, rawText: string): void {
+    const store = useAppStore.getState();
+    addLog(`LLM: ${cmd.type} ${JSON.stringify(cmd.params)}`);
+    switch (cmd.type) {
+      // ---- 退出 ----
+      case "exit": {
+        addLog("休眠");
+        setStatus("sleeping");
+        setLastText("");
+        setLastRecognizedText("");
+        voiceFeedback.sleep();
+        break;
+      }
+
+      // ---- 新建画布 ----
+      case "new_canvas": {
+        const w = cmd.params.width as number;
+        const h = cmd.params.height as number;
+        if (store.hasUnsavedContent) {
+          voiceFeedback.info("未保存内容将丢失");
+        }
+        store.setCanvasConfig({ width: w, height: h });
+        store.setZoomLevel(1);
+        setCanvasKey((k) => k + 1);
+        voiceFeedback.success("新建画布");
+        addLog(`新建画布 ${w}x${h}`);
+        break;
+      }
+
+      // ---- 清空画布 ----
+      case "clear_canvas": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (!canvasManager.hasObjects()) {
+          voiceFeedback.info("画布已经是空的");
+          return;
+        }
+        store.setPendingConfirm({
+          question: "确定要清空画布吗？",
+          action: () => {
+            canvasManager.clear();
+            store.setHasUnsavedContent(false);
+            voiceFeedback.success("清空画布");
+            addLog("画布已清空");
+          },
+        });
+        voiceFeedback.confirm("确定要清空画布吗？");
+        break;
+      }
+
+      // ---- F005: 画布缩放 ----
+      case "canvas_zoom_in": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const zoom = canvasManager.zoomIn();
+        const pct = Math.round(zoom * 100);
+        store.setZoomLevel(zoom);
+        voiceFeedback.zoomIn(pct);
+        addLog(`放大 ${pct}%`);
+        break;
+      }
+
+      case "canvas_zoom_out": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const zoom = canvasManager.zoomOut();
+        const pct = Math.round(zoom * 100);
+        store.setZoomLevel(zoom);
+        voiceFeedback.zoomOut(pct);
+        addLog(`缩小 ${pct}%`);
+        break;
+      }
+
+      case "canvas_zoom_reset": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        canvasManager.zoomReset();
+        store.setZoomLevel(1);
+        voiceFeedback.zoomReset();
+        addLog("恢复原始大小");
+        break;
+      }
+
+      case "canvas_zoom_fit": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const container = document.getElementById("canvas-container");
+        if (!container) {
+          voiceFeedback.error("无法获取画布容器");
+          return;
+        }
+        const rect = container.getBoundingClientRect();
+        const zoom = canvasManager.zoomToFit(rect.width, rect.height);
+        const pct = Math.round(zoom * 100);
+        store.setZoomLevel(zoom);
+        voiceFeedback.zoomFit(pct);
+        addLog(`适应屏幕 ${pct}%`);
+        break;
+      }
+
+      // ---- 撤销 ----
+      case "undo": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (canvasManager.undo()) {
+          voiceFeedback.undo();
+        } else {
+          voiceFeedback.nothingToUndo();
+        }
+        break;
+      }
+
+      // ---- 恢复 ----
+      case "redo": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (canvasManager.redo()) {
+          voiceFeedback.redo();
+        } else {
+          voiceFeedback.nothingToRedo();
+        }
+        break;
+      }
+
+
+      // ---- F006: 绘制直线 ----
+      case "draw_line": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const size = canvasManager.getSize()!;
+        const pos = cmd.params.position as { x: number; y: number } | null;
+        const lineSize = (cmd.params.size as number) || (cmd.params.length as number) || 100;
+        const cx = pos ? pos.x * size.width : size.width / 2;
+        const cy = pos ? pos.y * size.height : size.height / 2;
+        const angle = pos ? 0 : -45;
+        const rad = (angle * Math.PI) / 180;
+        const halfLen = lineSize / 2;
+        const x1 = cx - halfLen * Math.cos(rad);
+        const y1 = cy - halfLen * Math.sin(rad);
+        const x2 = cx + halfLen * Math.cos(rad);
+        const y2 = cy + halfLen * Math.sin(rad);
+        canvasManager.drawLine(x1, y1, x2, y2);
+        voiceFeedback.drawLine();
+        addLog("绘制直线");
+        break;
+      }
+
+      // ---- F007: 绘制圆形 ----
+      case "draw_circle": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const cSize = canvasManager.getSize()!;
+        const cPos = cmd.params.position as { x: number; y: number } | null;
+        const cRadius = (cmd.params.radius as number) || (cmd.params.size as number) || 50;
+        const cIsEllipse = (cmd.params.isEllipse as boolean) || false;
+        const ccx = cPos ? cPos.x * cSize.width : cSize.width / 2;
+        const ccy = cPos ? cPos.y * cSize.height : cSize.height / 2;
+        canvasManager.drawCircle(ccx, ccy, cRadius, cIsEllipse);
+        voiceFeedback.drawCircle();
+        addLog(`绘制${cIsEllipse ? "椭圆" : "圆形"} r=${cRadius}`);
+        break;
+      }
+
+      // ---- F008: 绘制矩形 ----
+      case "draw_rectangle": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const rSize = canvasManager.getSize()!;
+        const rPos = cmd.params.position as { x: number; y: number } | null;
+        const rIsSquare = (cmd.params.isSquare as boolean) || false;
+        const rWidth = rIsSquare
+          ? ((cmd.params.width as number) || (cmd.params.size as number) || 100)
+          : ((cmd.params.width as number) || (cmd.params.size as number) || 150);
+        const rHeight = rIsSquare
+          ? rWidth
+          : ((cmd.params.height as number) || (cmd.params.size as number) || 100);
+        const rLeft = rPos ? rPos.x * rSize.width - rWidth / 2 : (rSize.width - rWidth) / 2;
+        const rTop = rPos ? rPos.y * rSize.height - rHeight / 2 : (rSize.height - rHeight) / 2;
+        canvasManager.drawRect(rLeft, rTop, rWidth, rHeight);
+        voiceFeedback.drawRectangle();
+        addLog(`绘制${rIsSquare ? "正方形" : "矩形"} ${rWidth}x${rHeight}`);
+        break;
+      }
+
+      // ---- F009: 绘制三角形 ----
+      case "draw_triangle": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const tSize = canvasManager.getSize()!;
+        const tPos = cmd.params.position as { x: number; y: number } | null;
+        const tIsEquilateral = (cmd.params.isEquilateral as boolean) !== false;
+        const tSide = (cmd.params.side as number) || (cmd.params.size as number) || 80;
+        const tCx = tPos ? tPos.x * tSize.width : tSize.width / 2;
+        const tCy = tPos ? tPos.y * tSize.height : tSize.height / 2;
+        canvasManager.drawTriangle(tCx, tCy, tSide, tIsEquilateral);
+        voiceFeedback.drawTriangle();
+        addLog(`绘制${tIsEquilateral ? "等边" : ""}三角形 side=${tSide}`);
+        break;
+      }
+
+      // ---- F010: 画笔颜色 ----
+      case "brush_color": {
+        const hex = cmd.params.color as string | undefined;
+        const name = cmd.params.colorName as string | undefined;
+        if (!hex) {
+          voiceFeedback.guidance("请指定画笔颜色，比如红色、蓝色、绿色");
+          return;
+        }
+        store.setBrushColor(hex);
+        voiceFeedback.brushColor(name || hex);
+        addLog(`画笔颜色 → ${name || hex}`);
+        break;
+      }
+
+      // ---- F011: 画笔粗细 ----
+      case "brush_width": {
+        const mode = cmd.params.mode as string;
+        const currentWidth = store.brushStrokeWidth;
+
+        if (mode === "absolute") {
+          const value = cmd.params.value as number;
+          store.setBrushStrokeWidth(value);
+          voiceFeedback.brushWidth(`粗细改为 ${value} 像素`);
+          addLog(`画笔粗细 → ${value}px`);
+        } else if (mode === "relative") {
+          const delta = cmd.params.delta as number;
+          const newWidth = Math.min(20, Math.max(1, currentWidth + delta));
+          store.setBrushStrokeWidth(newWidth);
+          const desc = delta > 0 ? "加粗" : "变细";
+          voiceFeedback.brushWidth(`${desc}到 ${newWidth} 像素`);
+          addLog(`画笔粗细 → ${newWidth}px`);
+        } else if (mode === "preset") {
+          const value = cmd.params.value as number;
+          const label = cmd.params.label as string;
+          store.setBrushStrokeWidth(value);
+          voiceFeedback.brushWidth(`画笔已换成${label}，${value} 像素`);
+          addLog(`画笔粗细 → ${label} (${value}px)`);
+        }
+        break;
+      }
+
+      // ---- F012: 填充与描边 ----
+      case "fill_mode": {
+        const mode = cmd.params.mode as string;
+
+        if (mode === "fill_color") {
+          const color = cmd.params.color as string | undefined;
+          const colorName = cmd.params.colorName as string | undefined;
+          if (!color) {
+            voiceFeedback.guidance("请指定填充颜色，比如填充红色、填充蓝色");
+            return;
+          }
+          store.setBrushFill(color);
+          voiceFeedback.fillMode(`填充已换成${colorName || color}`);
+          addLog(`填充颜色 → ${colorName || color}`);
+        } else if (mode === "outline") {
+          store.setBrushFill("none");
+          voiceFeedback.fillMode("已切换为轮廓模式，只显示描边");
+          addLog("填充模式 → 仅轮廓");
+        } else if (mode === "default") {
+          store.setBrushFill("");
+          voiceFeedback.fillMode("已恢复默认填充");
+          addLog("填充模式 → 默认填充");
+        }
+        break;
+      }
+
+      // ---- F015: 删除最近绘制的图形 ----
+      case "delete_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (canvasManager.deleteLast()) {
+          voiceFeedback.deleteShape();
+          addLog("已删除最近图形");
+        } else {
+          voiceFeedback.info("画布上没有可删除的图形");
+        }
+        break;
+      }
+
+      // ---- F022: 虚线/点划线 ----
+      case "line_style": {
+        const dashMode = cmd.params.mode as string;
+        if (dashMode === "dashed") {
+          store.setBrushDashArray([10, 6]);
+          voiceFeedback.lineStyle("已切换为虚线");
+          addLog("线条风格 → 虚线");
+        } else if (dashMode === "dotted") {
+          store.setBrushDashArray([3, 5]);
+          voiceFeedback.lineStyle("已切换为点划线");
+          addLog("线条风格 → 点划线");
+        } else {
+          store.setBrushDashArray([]);
+          voiceFeedback.lineStyle("已恢复实线");
+          addLog("线条风格 → 实线");
+        }
+        break;
+      }
+
+      // ---- F016: 保存图片 ----
+      case "save_image": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (!canvasManager.hasObjects()) {
+          voiceFeedback.info("画布为空，没有可保存的内容");
+          return;
+        }
+        canvasManager.saveToPNG();
+        store.setHasUnsavedContent(false);
+        voiceFeedback.saveImage();
+        addLog("图片已保存为PNG");
+        break;
+      }
+
+      // ---- F017: 自定义画布尺寸 ----
+      case "canvas_resize": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const rw = cmd.params.width as number | undefined;
+        const rh = cmd.params.height as number | undefined;
+        if (!rw || !rh || rw < 200 || rh < 200 || rw > 4000 || rh > 4000) {
+          voiceFeedback.guidance("请指定有效的画布尺寸，比如宽800高600，最小200最大4000");
+          return;
+        }
+        canvasManager.resize(rw, rh);
+        store.setCanvasConfig({ width: rw, height: rh });
+        voiceFeedback.canvasResize(rw, rh);
+        addLog(`画布调整 → ${rw}x${rh}`);
+        break;
+      }
+
+      // ---- F018: 画布平移 ----
+      case "canvas_pan": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const dir = cmd.params.direction as string;
+        const amt = (cmd.params.amount as number) || 100;
+        canvasManager.pan(dir, amt);
+        const dirLabel: Record<string, string> = { up: "上", down: "下", left: "左", right: "右" };
+        voiceFeedback.canvasPan(dirLabel[dir] || dir, amt);
+        addLog(`画布平移 → ${dirLabel[dir] || dir} ${amt}px`);
+        break;
+      }
+
+      // ---- F019: 绘制五角星 ----
+      case "draw_star": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const starSize = canvasManager.getSize()!;
+        const starPos = cmd.params.position as { x: number; y: number } | null;
+        const starR = (cmd.params.radius as number) || (cmd.params.size as number) || 60;
+        const scx = starPos ? starPos.x * starSize.width : starSize.width / 2;
+        const scy = starPos ? starPos.y * starSize.height : starSize.height / 2;
+        canvasManager.drawStar(scx, scy, starR);
+        voiceFeedback.drawStar();
+        addLog(`绘制五角星 r=${starR}`);
+        break;
+      }
+
+      // ---- F020: 绘制多边形 ----
+      case "draw_polygon": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const polySize = canvasManager.getSize()!;
+        const polyPos = cmd.params.position as { x: number; y: number } | null;
+        const polyR = (cmd.params.radius as number) || (cmd.params.size as number) || 60;
+        const polySides = (cmd.params.sides as number) || 6;
+        const pcx = polyPos ? polyPos.x * polySize.width : polySize.width / 2;
+        const pcy = polyPos ? polyPos.y * polySize.height : polySize.height / 2;
+        canvasManager.drawPolygon(pcx, pcy, polyR, polySides);
+        voiceFeedback.drawPolygon(polySides);
+        addLog(`绘制${polySides}边形 r=${polyR}`);
+        break;
+      }
+      // ---- F023: 选中图形 ----
+      case "select_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const selMode = cmd.params.mode as string;
+        if (selMode === "last") {
+          const obj = canvasManager.selectLast();
+          if (obj) {
+  
+  voiceFeedback.selectShape("已选中最近绘制的图形");
+            addLog("选中最近图形");
+          } else {
+            voiceFeedback.nothingToSelect();
+          }
+        } else if (selMode === "type") {
+          const shapeType = (cmd.params.shapeType as string) || "圆形";
+          const obj = canvasManager.selectByType(shapeType);
+          if (obj) {
+  
+  voiceFeedback.selectShape(`已选中${shapeType}`);
+            addLog(`选中${shapeType}`);
+          } else {
+            voiceFeedback.nothingToSelect();
+          }
+        } else if (selMode === "all") {
+          const count = canvasManager.selectAll();
+          if (count > 0) {
+            voiceFeedback.selectShape(`已全选${count}个图形`);
+            addLog(`全选 ${count} 个图形`);
+          } else {
+            voiceFeedback.nothingToSelect();
+          }
+        } else if (selMode === "deselect") {
+          canvasManager.deselectAll();
+          voiceFeedback.selectShape("已取消选中");
+          addLog("取消选中");
+        }
+        break;
+      }
+
+      // ---- F024: 移动图形 ----
+      case "move_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const mDir = cmd.params.direction as string;
+        const mAmt = (cmd.params.amount as number) || 50;
+        if (canvasManager.moveSelected(mDir, mAmt)) {
+          voiceFeedback.moveShape(mDir, mAmt);
+          addLog(`图形移动 → ${mDir} ${mAmt}px`);
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+
+      // ---- F025: 缩放图形 ----
+      case "scale_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const factor = (cmd.params.factor as number) || 1.2;
+        if (canvasManager.scaleSelected(factor)) {
+          voiceFeedback.scaleShape(factor > 1);
+          addLog(`图形缩放 → ${Math.round(factor * 100)}%`);
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+
+      // ---- F026: 旋转图形 ----
+      case "rotate_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const angle = (cmd.params.angle as number) || 45;
+        if (canvasManager.rotateSelected(angle)) {
+          voiceFeedback.rotateShape(angle);
+          addLog(`图形旋转 → ${angle}°`);
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+
+      // ---- F027: 复制图形 ----
+      case "copy_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (canvasManager.copySelected()) {
+          voiceFeedback.copyShape();
+          addLog("图形已复制");
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+
+      // ---- F027: 粘贴图形 ----
+      case "paste_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        canvasManager.pasteSelected();
+        voiceFeedback.pasteShape();
+        addLog("图形已粘贴");
+        break;
+      }
+
+      // ---- F028: 翻转图形 ----
+      case "flip_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const flipDir = (cmd.params.direction as string) || "horizontal";
+        if (canvasManager.flipSelected(flipDir as "horizontal" | "vertical")) {
+          voiceFeedback.flipShape(flipDir);
+          addLog(`图形翻转 → ${flipDir}`);
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+      case "unrecognized": {
+          setIsProcessing(true);
+          addLog("LLM: 请求中...");
+          const origText = rawText;
+          parseWithLLM(origText).then((llmResult) => {
+            setIsProcessing(false);
+            if (llmResult.type !== "unrecognized") {
+              const parsedCmd = { type: llmResult.type, params: llmResult.params || {}, raw: origText };
+              executeParsedDirect(parsedCmd, origText);
+            } else {
+              addLog("LLM: 无法解析");
+              voiceFeedback.unrecognized();
+            }
+          }).catch(() => {
+            setIsProcessing(false);
+            addLog("LLM: 请求失败");
+            voiceFeedback.unrecognized();
+          });
+        }
+        break;
+    }
+  }
+
   function executeCommand(text: string) {
     const store = useAppStore.getState();
     const pending = store.pendingConfirm;
@@ -80,6 +659,7 @@ export default function App() {
       voiceFeedback.guidance("请说确定或取消");
       return;
     }
+
 
     // 2. 解析指令
     const cmd = parseCommand(text);
@@ -623,12 +1203,33 @@ export default function App() {
         }
         break;
       }
-
-      case "unrecognized":
-        voiceFeedback.unrecognized();
+      case "unrecognized": {
+        if (llmOnlineRef.current) {
+          setIsProcessing(true);
+          addLog("LLM: 请求中...");
+          const origText = text;
+          parseWithLLM(origText).then((llmResult) => {
+            setIsProcessing(false);
+            if (llmResult.type !== "unrecognized") {
+              const parsedCmd = { type: llmResult.type, params: llmResult.params || {}, raw: origText };
+              executeParsedDirect(parsedCmd, origText);
+            } else {
+              addLog("LLM: 无法解析");
+              voiceFeedback.unrecognized();
+            }
+          }).catch(() => {
+            setIsProcessing(false);
+            addLog("LLM: 请求失败");
+            voiceFeedback.unrecognized();
+          });
+        } else {
+          voiceFeedback.unrecognized();
+        }
         break;
+      }
     }
   }
+
 
   // ========== 语音识别 ==========
   const startOnce = useCallback(() => {
@@ -675,6 +1276,7 @@ export default function App() {
       }
 
       if (currentStatus === "active") {
+        text = correctHotwords(text);
         executeCommand(text);
       }
     };
@@ -731,8 +1333,8 @@ export default function App() {
   const showCanvas = status === "active" && canvasConfig !== null;
 
   return (
-    <div className="w-full h-full bg-gray-950 text-white flex flex-col select-none">
-      {status !== "idle" && <StatusBar />}
+    <div className="relative w-full h-full bg-gray-950 text-white flex flex-col select-none">
+      {status !== "idle" && <StatusBar llmOnline={llmOnline} />}
 
       {showCanvas ? (
         <Canvas width={canvasConfig!.width} height={canvasConfig!.height} canvasKey={canvasKey} />
@@ -782,6 +1384,14 @@ export default function App() {
           <span className="text-base">❓</span>
           <span>{pendingConfirm.question}</span>
           <span className="text-gray-500 ml-2">说"确定"或"取消"</span>
+        </div>
+      )}
+
+      {/* LLM 处理中 */}
+      {isProcessing && (
+        <div className="mx-auto mb-1 px-4 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 bg-purple-500/20 text-purple-300 animate-pulse">
+          <span className="text-base">🤖</span>
+          <span>AI 思考中...</span>
         </div>
       )}
 

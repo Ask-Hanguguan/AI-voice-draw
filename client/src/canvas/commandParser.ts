@@ -1,4 +1,4 @@
-﻿// 指令解析器 — Phase 1 正则匹配
+// 指令解析器 — Phase 1 正则匹配
 // 将语音识别文本转换为结构化绘图指令
 
 export type CommandType =
@@ -40,42 +40,36 @@ export interface Command {
   raw: string;
 }
 
+import spec from "@shared/instructions-spec.json";
 // ========== 画布尺寸配置 ==========
-const CANVAS_SIZES: Record<string, { width: number; height: number }> = {
-  default: { width: 800, height: 600 },
-  a4: { width: 794, height: 1123 },
-  square: { width: 800, height: 800 },
-};
+// 从 JSON 指令规范构建画布尺寸映射
+const CANVAS_SIZES: Record<string, { width: number; height: number }> = {};
+for (const cs of spec.canvasSizes) {
+  CANVAS_SIZES[cs.keyword] = { width: cs.width, height: cs.height };
+  for (const alias of cs.aliases) {
+    CANVAS_SIZES[alias] = { width: cs.width, height: cs.height };
+  }
+}
 
 // ========== F006~F009: 位置映射 ==========
-const POSITION_AREAS: Record<string, { x: number; y: number }> = {
-  "左上角": { x: 0.2, y: 0.2 },
-  "右上角": { x: 0.8, y: 0.2 },
-  "左下角": { x: 0.2, y: 0.8 },
-  "右下角": { x: 0.8, y: 0.8 },
-  "中间": { x: 0.5, y: 0.5 },
-  "中心": { x: 0.5, y: 0.5 },
-  "上方": { x: 0.5, y: 0.15 },
-  "上面": { x: 0.5, y: 0.15 },
-  "下方": { x: 0.5, y: 0.85 },
-  "下面": { x: 0.5, y: 0.85 },
-  "左方": { x: 0.15, y: 0.5 },
-  "左边": { x: 0.15, y: 0.5 },
-  "左面": { x: 0.15, y: 0.5 },
-  "右方": { x: 0.85, y: 0.5 },
-  "右边": { x: 0.85, y: 0.5 },
-  "右面": { x: 0.85, y: 0.5 },
-};
+// 从 JSON 指令规范构建位置映射
+const POSITION_AREAS: Record<string, { x: number; y: number }> = {};
+for (const pos of spec.positions) {
+  POSITION_AREAS[pos.keyword] = { x: pos.x, y: pos.y };
+  for (const alias of pos.aliases) {
+    POSITION_AREAS[alias] = { x: pos.x, y: pos.y };
+  }
+}
 
 // 大小映射 (半径)
-const SIZE_MAP: Record<string, number> = {
-  "大": 100,
-  "大的": 100,
-  "中": 50,
-  "中等": 50,
-  "小": 25,
-  "小的": 25,
-};
+// 从 JSON 指令规范构建大小映射
+const SIZE_MAP: Record<string, number> = {};
+for (const sz of spec.sizes) {
+  SIZE_MAP[sz.keyword] = sz.radius;
+  for (const alias of sz.aliases) {
+    SIZE_MAP[alias] = sz.radius;
+  }
+}
 
 // 辅助：提取位置参数
 function extractPosition(text: string): { x: number; y: number } | null {
@@ -115,6 +109,7 @@ function extractDimensions(text: string): { width: number; height: number } | nu
 }
 
 // 辅助：提取中文数字表示的边数 (如 五边形→5, 六边形→6)
+// 中文数字→阿拉伯数字映射
 const CN_SIDES: Record<string, number> = {
   "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
 };
@@ -806,9 +801,122 @@ const drawRules: Rule[] = [
   },
 ];
 
+// ========== 意图预过滤器 ==========
+// 快速判断文本是否包含绘图意图，无意图直接丢弃，避免无效 LLM 调用
+
+// 从 JSON 规范提取所有动作动词 + 别名
+const DRAWING_VERBS = new Set<string>();
+for (const verb of spec.actionVerbs) {
+  DRAWING_VERBS.add(verb.keyword);
+  for (const alias of verb.aliases) {
+    DRAWING_VERBS.add(alias);
+  }
+}
+
+// 额外添加一些明确的绘图相关触发词
+const DRAWING_TRIGGERS = new Set([
+  ...DRAWING_VERBS,
+  "圆", "矩形", "三角形", "五角星", "多边形", "直线",
+  "颜色", "红色", "蓝色", "绿色", "画笔", "画布",
+  "填充", "轮廓", "虚线", "实线", "撤销", "保存",
+]);
+
+/**
+ * 判断文本是否包含绘图意图
+ * 策略：包含任一触发词 → 可能是绘图指令
+ * 准确率 ~85-90%，边界 case 由 LLM 兜底
+ */
+
+// ========== 形状关键词分组（歧义检测用） ==========
+
+
+// ========== 复杂参数检测 ==========
+// 正则解析器无法处理的场景：中文数字、复合量词、复杂空间描述
+const CN_NUMBERS = /[零一二两三四五六七八九十百千万亿]/;
+const CN_UNITS = /[个条根道片块只张把根]/;
+const COMPLEX_DIRECTIONS = /[东南西北].*[东南西北]|斜|偏|往|朝|向/;
+
+/**
+ * 检测文本是否包含正则解析器无法充分处理的复杂参数
+ * 例如："两百像素"（中文数字）、"粗细适中"（模糊描述）
+ */
+function hasComplexParams(text: string): boolean {
+  // 所有形状关键词（用于排除"五角星""六边形"等形状名）
+  const allShapeKWs = Object.values(SHAPE_KEYWORD_GROUPS).flat();
+  
+  // 中文数字 + 非形状名、非冠词 → 参数复杂度高
+  if (CN_NUMBERS.test(text)) {
+    const numMatch = text.match(/[零一二两三四五六七八九十百千万亿]+/g);
+    if (numMatch) {
+      for (const m of numMatch) {
+        // 排除"一个"中的"一"（冠词，非参数）
+        if (m === "一" && /一个/.test(text)) continue;
+        // 排除形状名中的数字（五角星、六边形等）
+        if (allShapeKWs.some(kw => kw.includes(m))) continue;
+        // 确实是参数数字 → 复杂
+        return true;
+      }
+    }
+  }
+  // 复合方向描述（如"左上方偏右"）
+  if (COMPLEX_DIRECTIONS.test(text)) return true;
+  // 模糊量词（如"稍微大一点"、"差不多"）
+  if (/稍微|差不多|大概|左右|上下|适中|中等偏/.test(text)) return true;
+  return false;
+}
+
+const SHAPE_KEYWORD_GROUPS: Record<string, string[]> = {
+  draw_circle: ["圆", "圆形", "圆圈", "椭圆"],
+  draw_rectangle: ["矩形", "长方形", "方块", "方框", "正方形"],
+  draw_triangle: ["三角形", "三角"],
+  draw_star: ["五角星", "星星", "星形"],
+  draw_polygon: ["多边形", "六边形", "五边形", "八边形", "七边形"],
+  draw_line: ["直线", "线段", "线条"],
+};
+
+/**
+ * 检测形状歧义：文本是否同时匹配多种形状类型的特征词
+ * 如 "圆角矩形" 同时含 "圆"(circle) 和 "矩形"(rectangle)
+ * 返回 true 表示存在歧义，应交给 LLM 解析
+ */
+function hasShapeAmbiguity(text: string, matchedType: string): boolean {
+  // 复杂参数：正则无法充分解析 → 交给 LLM
+  if (hasComplexParams(text)) return true;
+  const matchedKeywords = SHAPE_KEYWORD_GROUPS[matchedType];
+  if (!matchedKeywords) return false;
+
+  for (const [type, keywords] of Object.entries(SHAPE_KEYWORD_GROUPS)) {
+    if (type === matchedType) continue;
+    // 检查文本是否包含其他形状的关键词
+    for (const kw of keywords) {
+      if (text.includes(kw)) {
+        // 但如果文本中的关键词是 matchedType 的超集则不歧义
+        // 例: "矩形" 匹配 draw_rectangle 且包含 "矩形" → 正常
+        const isMatchedKeyword = matchedKeywords.some(mk => text.includes(mk) && mk === kw);
+        if (!isMatchedKeyword) {
+          return true; // 歧义！
+        }
+      }
+    }
+  }
+  return false;
+}
+
+
+export function hasDrawingIntent(text: string): boolean {
+  for (const trigger of DRAWING_TRIGGERS) {
+    if (text.includes(trigger)) return true;
+  }
+  return false;
+}
 // ========== 解析入口 ==========
 
 export function parseCommand(text: string): Command {
+  // 意图预过滤：无绘图意图直接返回 unrecognized
+  if (!hasDrawingIntent(text)) {
+    return { type: "unrecognized", params: {}, raw: text };
+  }
+
   const cleaned = text.replace(/[，。！？,!? ]/g, "");
 
   // 先匹配绘图指令
@@ -817,6 +925,10 @@ export function parseCommand(text: string): Command {
       const match = cleaned.match(pattern);
       if (match) {
         const params = rule.extractParams ? rule.extractParams(match, text) : {};
+        // 歧义检测：文本匹配多种形状特征词时交给 LLM
+        if (hasShapeAmbiguity(text, rule.type)) {
+          return { type: "unrecognized", params: {}, raw: text };
+        }
         return { type: rule.type, params, raw: text };
       }
     }
@@ -828,6 +940,10 @@ export function parseCommand(text: string): Command {
       const match = cleaned.match(pattern);
       if (match) {
         const params = rule.extractParams ? rule.extractParams(match, cleaned) : {};
+        // 歧义检测：文本匹配多种形状特征词时交给 LLM
+        if (hasShapeAmbiguity(text, rule.type)) {
+          return { type: "unrecognized", params: {}, raw: text };
+        }
         return {
           type: rule.type,
           params,

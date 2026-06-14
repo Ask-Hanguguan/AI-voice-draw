@@ -1,6 +1,10 @@
 ﻿import { useAppStore } from "../stores/appStore";
 
-export default function StatusBar() {
+interface StatusBarProps {
+  llmOnline: boolean;
+}
+
+export default function StatusBar({ llmOnline }: StatusBarProps) {
   const lastRecognizedText = useAppStore((s) => s.lastRecognizedText);
   const status = useAppStore((s) => s.status);
   const lastFeedbackType = useAppStore((s) => s.lastFeedbackType);
@@ -70,8 +74,18 @@ export default function StatusBar() {
         )}
       </div>
 
-      {/* 右侧：F005 缩放 + 退出提示 */}
+      {/* 右侧：AI 状态 + 缩放 + 退出提示 */}
       <div className="flex items-center gap-3 text-xs">
+        <span
+          className="px-2 py-0.5 rounded-full flex items-center gap-1"
+          style={{
+            background: llmOnline ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
+            color: llmOnline ? "#86efac" : "#fca5a5",
+          }}
+        >
+          <span className={"h-1.5 w-1.5 rounded-full " + (llmOnline ? "bg-green-400" : "bg-red-400")} />
+          <span>AI</span>
+        </span>
         {canvasConfig && status === "active" && (
           <span className="text-gray-400 bg-gray-800 px-2 py-0.5 rounded">
             🔍 {Math.round(zoomLevel * 100)}%

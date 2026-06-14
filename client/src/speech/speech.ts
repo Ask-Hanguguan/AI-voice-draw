@@ -1,4 +1,6 @@
-﻿// 语音识别服务 — 封装 Web Speech API，支持持续监听
+// 语音识别服务 — 封装 Web Speech API，支持持续监听 + 热词纠错
+import { correctHotwords } from "./hotwordCorrector.ts";
+
 type SpeechCallback = (text: string, isFinal: boolean) => void;
 
 class SpeechService {
@@ -34,6 +36,8 @@ class SpeechService {
           }
         }
         if (best && this.onResult) {
+          // 热词纠错：修正 ASR 常见识别错误
+          best = correctHotwords(best);
           this.onResult(best, result.isFinal);
         }
       }
