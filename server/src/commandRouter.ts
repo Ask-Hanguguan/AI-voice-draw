@@ -26,7 +26,6 @@ function getModel(): string {
 function getBrushModel(): string {
   return process.env.BRUSH_MODEL || "qwen3.5-omni-plus-2026-03-15";
 }
-
 // ========== LLM 调用辅助 ==========
 
 async function callLLM(
