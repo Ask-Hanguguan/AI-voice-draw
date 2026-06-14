@@ -1,7 +1,7 @@
 ﻿// 画布管理器 — 封装 Fabric.js Canvas 生命周期
 // 负责创建、销毁、清空画布，撤销/恢复操作历史栈，视图缩放，以及基础绘图
 
-import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle, Point, Polygon, ActiveSelection, FabricObject } from "fabric";
+import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle, Point, Polygon, ActiveSelection, FabricObject, Path } from "fabric";
 import { useAppStore } from "../stores/appStore";
 
 export interface CanvasConfig {
@@ -660,6 +660,47 @@ class CanvasManager {
     this.saveSnapshot();
     console.log("[Canvas] 图形翻转:", direction);
     return true;
+  }
+
+  // ========== 画笔路径（LLM Brush Drawing）==========
+
+  /**
+   * 执行 LLM 生成的画笔路径序列
+   * 每笔笔触通过 SVG Path 数据创建 Fabric.Path 对象
+   */
+  drawBrushPath(strokes: Array<{
+    pathData: string;
+    fill?: string;
+    stroke?: string;
+    strokeWidth?: number;
+    opacity?: number;
+  }>): number {
+    if (!this.canvas) return 0;
+    const brush = this.getBrushStyle();
+    let count = 0;
+
+    for (const s of strokes) {
+      try {
+        const opts: Record<string, unknown> = {
+          fill: s.fill ?? brush.fill ?? "rgba(0,0,0,0.15)",
+          stroke: s.stroke ?? brush.color ?? "#000000",
+          strokeWidth: s.strokeWidth ?? brush.strokeWidth ?? 2,
+          opacity: s.opacity ?? 1,
+          selectable: true,
+          evented: true,
+        };
+        const path = new Path(s.pathData, opts);
+        this.canvas.add(path);
+        count++;
+      } catch (err) {
+        console.warn("[Canvas] 画笔路径解析失败:", err, s.pathData);
+      }
+    }
+
+    this.renderCanvas();
+    this.saveSnapshot();
+    console.log(`[Canvas] 画笔路径执行完毕: ${count}/${strokes.length} 笔`);
+    return count;
   }
 
 
