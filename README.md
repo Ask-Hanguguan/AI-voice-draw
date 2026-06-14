@@ -4,6 +4,10 @@
 
 ---
 
+## 演示视频
+
+[![Bilibili](https://img.shields.io/badge/Bilibili-演示视频-00A1D6?logo=bilibili)](https://www.bilibili.com/video/BV1saJK65EQo/)
+
 ## 目录
 
 - [功能特性](#功能特性)
@@ -100,6 +104,10 @@
 4. **LLM 画笔路径**：若用户描述的图形无预定义工具，交由 `qwen3.5-omni-plus-2026-03-15` 直接生成多段 SVG path 数据，`canvasManager.drawBrushPath()` 逐笔绘制
 
 ---
+
+## 演示视频
+
+[![Bilibili](https://img.shields.io/badge/Bilibili-演示视频-00A1D6?logo=bilibili)](https://www.bilibili.com/video/BV1saJK65EQo/)
 
 ## 目录结构
 
