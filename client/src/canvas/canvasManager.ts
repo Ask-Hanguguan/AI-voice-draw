@@ -1,7 +1,7 @@
 ﻿// 画布管理器 — 封装 Fabric.js Canvas 生命周期
 // 负责创建、销毁、清空画布，撤销/恢复操作历史栈，视图缩放，以及基础绘图
 
-import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle } from "fabric";
+import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle, Polygon } from "fabric";
 import { useAppStore } from "../stores/appStore";
 
 export interface CanvasConfig {
@@ -375,7 +375,45 @@ class CanvasManager {
     this.saveSnapshot();
   }
 
-  
+  // ========== F019: 绘制五角星 ==========
+
+  drawStar(cx: number, cy: number, outerR: number, innerR?: number, numPoints = 5): void {
+    if (!this.canvas) return;
+    const opts = this.shapeOpts();
+    const r2 = innerR ?? Math.round(outerR * 0.382);
+    const vertices: { x: number; y: number }[] = [];
+    // 从顶部开始，交替外顶点和内顶点
+    for (let i = 0; i < numPoints * 2; i++) {
+      const angle = (Math.PI / 2) * -1 + (Math.PI / numPoints) * i;
+      const r = i % 2 === 0 ? outerR : r2;
+      vertices.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+    }
+    const star = new Polygon(vertices, { ...opts, originX: "center", originY: "center" });
+    this.canvas.add(star);
+    this.renderCanvas();
+    console.log("[Canvas] 五角星已添加，对象数:", this.canvas.getObjects().length);
+    this.saveSnapshot();
+  }
+
+  // ========== F020: 绘制多边形 ==========
+
+  drawPolygon(cx: number, cy: number, radius: number, sides: number): void {
+    if (!this.canvas) return;
+    const opts = this.shapeOpts();
+    const vertices: { x: number; y: number }[] = [];
+    // 从顶部开始
+    for (let i = 0; i < sides; i++) {
+      const angle = (Math.PI / 2) * -1 + (2 * Math.PI / sides) * i;
+      vertices.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+    }
+    const polygon = new Polygon(vertices, { ...opts, originX: "center", originY: "center" });
+    this.canvas.add(polygon);
+    this.renderCanvas();
+    console.log(`[Canvas] ${sides}边形已添加，对象数:`, this.canvas.getObjects().length);
+    this.saveSnapshot();
+  }
+
+
 }
 
 export const canvasManager = new CanvasManager();

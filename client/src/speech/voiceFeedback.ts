@@ -111,6 +111,16 @@ class VoiceFeedbackService {
     this.success(`画笔已换成${colorName}`);
   }
 
+  // F019: 绘制五角星
+  drawStar(): void {
+    this.success("绘制五角星");
+  }
+
+  // F020: 绘制多边形
+  drawPolygon(sides: number): void {
+    this.success(`绘制${sides}边形`);
+  }
+
   stop(): void { ttsService.stop(); }
 }
 
