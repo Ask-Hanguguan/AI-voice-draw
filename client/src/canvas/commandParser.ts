@@ -16,6 +16,15 @@ export type CommandType =
   | "draw_rectangle"
   | "draw_triangle"
   | "brush_color"
+  | "brush_width"
+  | "fill_mode"
+  | "delete_shape"
+  | "save_image"
+  | "canvas_resize"
+  | "canvas_pan"
+  | "draw_star"
+  | "draw_polygon"
+  | "line_style"
   | "unrecognized";
 
 export interface Command {
@@ -86,6 +95,34 @@ function extractNumeric(text: string, keywords: string[]): number | null {
   return null;
 }
 
+// 辅助：提取宽高 (如 宽800 高600, 1024x768)
+function extractDimensions(text: string): { width: number; height: number } | null {
+  // 格式: 宽800 高600
+  const w1 = extractNumeric(text, ["宽度", "宽"]);
+  const h1 = extractNumeric(text, ["高度", "高"]);
+  if (w1 && h1) return { width: w1, height: h1 };
+  // 格式: 1024x768, 1024乘768, 1024*768
+  const m = text.match(/(\d{3,4})\s*[x×乘\*]\s*(\d{3,4})/);
+  if (m) return { width: parseInt(m[1], 10), height: parseInt(m[2], 10) };
+  return null;
+}
+
+// 辅助：提取中文数字表示的边数 (如 五边形→5, 六边形→6)
+const CN_SIDES: Record<string, number> = {
+  "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+};
+function extractSides(text: string): number | null {
+  // "正?N边形" / "正?N角形" 如 "五边形", "正六边形", "正五角形"
+  const m = text.match(/(三|四|五|六|七|八|九|十)边/);
+  if (m && m[1]) return CN_SIDES[m[1]] ?? null;
+  const m2 = text.match(/(三|四|五|六|七|八|九|十)角形/);
+  if (m2 && m2[1]) return CN_SIDES[m2[1]] ?? null;
+  // 阿拉伯数字: "3边形", "6边形"
+  const m3 = text.match(/(\d+)\s*边/);
+  if (m3) return parseInt(m3[1], 10);
+  return null;
+}
+
 // ========== 指令规则表 ==========
 
 interface Rule {
@@ -119,6 +156,18 @@ const rules: Rule[] = [
       /打开.*画[布板面]/, /新.*画[布板面]/, /建.*画[布板面]/, /新建/,
     ],
     extractParams: () => ({ ...CANVAS_SIZES.default }),
+  },
+
+  // ---- F015: 删除最近绘制的图形 ----
+  {
+    type: "delete_shape",
+    patterns: [
+      /删除.*(?:图形|这个|那个|最后|上一[个些]|对象)/,
+      /(?:删掉|去掉).*(?:图形|这个|那个|最后|上一[个些]|对象)/,
+      /擦掉.*(?:这个|那个|最后|图形|对象)/,
+      /^删[除掉]$/,
+      /^去掉$/,
+    ],
   },
 
   // ---- 清空画布 ----
@@ -170,6 +219,80 @@ const rules: Rule[] = [
   {
     type: "redo",
     patterns: [/恢复/, /重[做建]/, /下一步/, /前[进移]/, /还[原回]撤/],
+  },
+
+  // ---- F016: 保存图片 ----
+  {
+    type: "save_image",
+    patterns: [
+      /保存.*(?:图片|图像|画[布板面]|为)/,
+      /导出.*(?:图片|图像|画[布板面]|PNG)/,
+      /存一[下个]/,
+      /下载.*(?:图片|图像|画[布板面])/,
+      /^保存$/,
+      /^导出$/,
+    ],
+  },
+
+  // ---- F017: 自定义画布尺寸 ----
+  {
+    type: "canvas_resize",
+    patterns: [
+      /画布.*(?:大小|尺寸|宽).*/,
+      /(?:设置|调整|修改|改).*画布.*(?:大小|尺寸)/,
+      /画布.*改为?/,
+      /调整.*画布/,
+    ],
+    extractParams: (_match, text) => {
+      const dims = extractDimensions(text);
+      return dims ? { width: dims.width, height: dims.height } : {};
+    },
+  },
+
+  // ---- F018: 画布平移 ----
+  {
+    type: "canvas_pan",
+    patterns: [
+      /(?:向上|往上).*平?移/,
+      /上移/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      return { direction: "up", amount: amount || 100 };
+    },
+  },
+  {
+    type: "canvas_pan",
+    patterns: [
+      /(?:向下|往下).*平?移/,
+      /下移/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      return { direction: "down", amount: amount || 100 };
+    },
+  },
+  {
+    type: "canvas_pan",
+    patterns: [
+      /(?:向左|往左).*平?移/,
+      /左移/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      return { direction: "left", amount: amount || 100 };
+    },
+  },
+  {
+    type: "canvas_pan",
+    patterns: [
+      /(?:向右|往右).*平?移/,
+      /右移/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      return { direction: "right", amount: amount || 100 };
+    },
   },
 ];
 
@@ -312,6 +435,186 @@ const drawRules: Rule[] = [
       const color = extractColor(text);
       return color ? { color: color.hex, colorName: color.name } : {};
     },
+  },
+  // ---- F011: 画笔粗细 ----
+  {
+    type: "brush_width",
+    patterns: [
+      /粗细.*(\d+)/,
+      /画笔.*粗细.*(\d+)/,
+      /线条.*粗细.*(\d+)/,
+      /粗细.*改为?.*(\d+)/,
+    ],
+    extractParams: (match, _text) => {
+      const value = parseInt(match[1], 10);
+      return { mode: "absolute", value: Math.min(20, Math.max(1, value)) };
+    },
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /粗一[点些]/,
+      /加粗/,
+      /变粗/,
+      /更粗/,
+      /粗线/,
+    ],
+    extractParams: () => ({ mode: "relative", delta: 2 }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /细一[点些]/,
+      /变细/,
+      /更细/,
+      /细线/,
+    ],
+    extractParams: () => ({ mode: "relative", delta: -2 }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /最粗/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 20, label: "最粗" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /很粗/,
+      /非常粗/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 12, label: "很粗" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /很细/,
+      /非常细/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 1, label: "很细" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /粗/,
+      /加宽/,
+      /宽/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 8, label: "粗" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /细/,
+      /窄/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 2, label: "细" }),
+  },
+  {
+    type: "brush_width",
+    patterns: [
+      /中等/,
+      /普通/,
+    ],
+    extractParams: () => ({ mode: "preset", value: 4, label: "中等" }),
+  },
+  // ---- F012: 填充与描边 ----
+  {
+    type: "fill_mode",
+    patterns: [
+      /填充.*(?:红|橙|黄|绿|蓝|紫|黑|白)/,
+      /填充颜[色料]/,
+      /用.*填充/,
+      /填充.*颜色/,
+    ],
+    extractParams: (_match, text) => {
+      const color = extractColor(text);
+      return color
+        ? { mode: "fill_color", color: color.hex, colorName: color.name }
+        : { mode: "fill_color", color: null };
+    },
+  },
+  {
+    type: "fill_mode",
+    patterns: [
+      /只.*(?:显示|画|留|要).*轮廓/,
+      /轮廓模[式色]/,
+      /(?:不要|取消|去掉|关闭).*填充/,
+      /不.*填充/,
+      /空心/,
+    ],
+    extractParams: () => ({ mode: "outline" }),
+  },
+  {
+    type: "fill_mode",
+    patterns: [
+      /(?:恢复|开启|打开).*填充/,
+      /填充.*(?:恢复|开启|打开)/,
+      /需要填充/,
+    ],
+    extractParams: () => ({ mode: "default" }),
+  },
+  // ---- F019: 绘制五角星 ----
+  {
+    type: "draw_star",
+    patterns: [
+      /画.*(?:五角星|星星|星形)/, /绘.*(?:五角星|星星|星形)/,
+      /画.*一[个].*(?:五角星|星星|星形)/,
+      /添加.*(?:五角星|星星|星形)/, /加.*(?:五角星|星星|星形)/,
+    ],
+    extractParams: (_match, text) => {
+      const pos = extractPosition(text);
+      const sizeKey = extractSize(text);
+      const radius = extractNumeric(text, ["半径", "大小"]);
+      return { position: pos, size: sizeKey, radius };
+    },
+  },
+  // ---- F020: 绘制多边形 ----
+  {
+    type: "draw_polygon",
+    patterns: [
+      /画.*(?:正?多边[形]?|正?[三五六七八九十]边[形]?)/,
+      /绘.*(?:正?多边[形]?|正?[三五六七八九十]边[形]?)/,
+      /画.*一[个].*(?:多边[形]?|正?[三五六七八九十]边[形]?)/,
+      /添加.*(?:多边[形]?|正?[三五六七八九十]边[形]?)/,
+    ],
+    extractParams: (_match, text) => {
+      const pos = extractPosition(text);
+      const sizeKey = extractSize(text);
+      const radius = extractNumeric(text, ["半径", "大小"]);
+      const sides = extractSides(text);
+      return { position: pos, size: sizeKey, radius, sides };
+    },
+  },
+  // ---- F022: 虚线/点划线 ----
+  {
+    type: "line_style",
+    patterns: [
+      /虚线/,
+      /画虚/,
+    ],
+    extractParams: () => ({ mode: "dashed" }),
+  },
+  {
+    type: "line_style",
+    patterns: [
+      /点划/,
+      /点[虚断]/,
+      /点线/,
+    ],
+    extractParams: () => ({ mode: "dotted" }),
+  },
+  {
+    type: "line_style",
+    patterns: [
+      /实线/,
+      /恢复.*实线/,
+      /取消.*虚线/,
+      /取消.*点划/,
+      /取消.*点线/,
+    ],
+    extractParams: () => ({ mode: "solid" }),
   },
 ];
 

@@ -111,6 +111,50 @@ class VoiceFeedbackService {
     this.success(`画笔已换成${colorName}`);
   }
 
+  // F011: 画笔粗细
+  brushWidth(desc: string): void {
+    this.success(desc);
+  }
+
+  // F012: 填充与描边
+  fillMode(desc: string): void {
+    this.success(desc);
+  }
+
+  // F015: 删除最近图形
+  deleteShape(): void {
+    this.success("已删除图形");
+  }
+
+  // F016: 保存图片
+  saveImage(): void {
+    this.success("图片已保存");
+  }
+
+  // F017: 自定义画布尺寸
+  canvasResize(w: number, h: number): void {
+    this.success(`画布已调整为宽${w}高${h}`);
+  }
+
+  // F018: 画布平移
+  canvasPan(direction: string, amount: number): void {
+    this.success(`画布向${direction}平移${amount}像素`);
+  }
+
+  // F019: 绘制五角星
+  drawStar(): void {
+    this.success("绘制五角星");
+  }
+
+  // F020: 绘制多边形
+  drawPolygon(sides: number): void {
+    this.success(`绘制${sides}边形`);
+  }
+
+  // F022: 虚线/点划线
+  lineStyle(desc: string): void {
+    this.success(desc);
+  }
   stop(): void { ttsService.stop(); }
 }
 

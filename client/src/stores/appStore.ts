@@ -39,6 +39,9 @@ interface AppState {
   brushStrokeWidth: number;
   brushFill: string;
 
+  /* F022: 线条风格（虚线/点划线/实线） */
+  brushDashArray: number[];
+
   setStatus: (status: AppStatus) => void;
   setLastRecognizedText: (text: string) => void;
   setSpeechReady: (ready: boolean) => void;
@@ -55,6 +58,7 @@ interface AppState {
   setBrushColor: (color: string) => void;
   setBrushStrokeWidth: (width: number) => void;
   setBrushFill: (fill: string) => void;
+  setBrushDashArray: (dash: number[]) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -76,6 +80,7 @@ export const useAppStore = create<AppState>((set) => ({
   brushColor: "#000000",
   brushStrokeWidth: 3,
   brushFill: "",
+  brushDashArray: [],
 
   setStatus: (status) => set({ status }),
   setLastRecognizedText: (text) => set({ lastRecognizedText: text }),
@@ -95,6 +100,7 @@ export const useAppStore = create<AppState>((set) => ({
   setBrushColor: (color) => set({ brushColor: color }),
   setBrushStrokeWidth: (width) => set({ brushStrokeWidth: width }),
   setBrushFill: (fill) => set({ brushFill: fill }),
+  setBrushDashArray: (dash) => set({ brushDashArray: dash }),
 }));
 
 (window as any).__store = useAppStore;

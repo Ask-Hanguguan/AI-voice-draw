@@ -318,6 +318,178 @@ export default function App() {
         break;
       }
 
+      // ---- F011: 画笔粗细 ----
+      case "brush_width": {
+        const mode = cmd.params.mode as string;
+        const currentWidth = store.brushStrokeWidth;
+
+        if (mode === "absolute") {
+          const value = cmd.params.value as number;
+          store.setBrushStrokeWidth(value);
+          voiceFeedback.brushWidth(`粗细改为 ${value} 像素`);
+          addLog(`画笔粗细 → ${value}px`);
+        } else if (mode === "relative") {
+          const delta = cmd.params.delta as number;
+          const newWidth = Math.min(20, Math.max(1, currentWidth + delta));
+          store.setBrushStrokeWidth(newWidth);
+          const desc = delta > 0 ? "加粗" : "变细";
+          voiceFeedback.brushWidth(`${desc}到 ${newWidth} 像素`);
+          addLog(`画笔粗细 → ${newWidth}px`);
+        } else if (mode === "preset") {
+          const value = cmd.params.value as number;
+          const label = cmd.params.label as string;
+          store.setBrushStrokeWidth(value);
+          voiceFeedback.brushWidth(`画笔已换成${label}，${value} 像素`);
+          addLog(`画笔粗细 → ${label} (${value}px)`);
+        }
+        break;
+      }
+
+      // ---- F012: 填充与描边 ----
+      case "fill_mode": {
+        const mode = cmd.params.mode as string;
+
+        if (mode === "fill_color") {
+          const color = cmd.params.color as string | undefined;
+          const colorName = cmd.params.colorName as string | undefined;
+          if (!color) {
+            voiceFeedback.guidance("请指定填充颜色，比如填充红色、填充蓝色");
+            return;
+          }
+          store.setBrushFill(color);
+          voiceFeedback.fillMode(`填充已换成${colorName || color}`);
+          addLog(`填充颜色 → ${colorName || color}`);
+        } else if (mode === "outline") {
+          store.setBrushFill("none");
+          voiceFeedback.fillMode("已切换为轮廓模式，只显示描边");
+          addLog("填充模式 → 仅轮廓");
+        } else if (mode === "default") {
+          store.setBrushFill("");
+          voiceFeedback.fillMode("已恢复默认填充");
+          addLog("填充模式 → 默认填充");
+        }
+        break;
+      }
+
+      // ---- F015: 删除最近绘制的图形 ----
+      case "delete_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (canvasManager.deleteLast()) {
+          voiceFeedback.deleteShape();
+          addLog("已删除最近图形");
+        } else {
+          voiceFeedback.info("画布上没有可删除的图形");
+        }
+        break;
+      }
+
+      // ---- F022: 虚线/点划线 ----
+      case "line_style": {
+        const dashMode = cmd.params.mode as string;
+        if (dashMode === "dashed") {
+          store.setBrushDashArray([10, 6]);
+          voiceFeedback.lineStyle("已切换为虚线");
+          addLog("线条风格 → 虚线");
+        } else if (dashMode === "dotted") {
+          store.setBrushDashArray([3, 5]);
+          voiceFeedback.lineStyle("已切换为点划线");
+          addLog("线条风格 → 点划线");
+        } else {
+          store.setBrushDashArray([]);
+          voiceFeedback.lineStyle("已恢复实线");
+          addLog("线条风格 → 实线");
+        }
+        break;
+      }
+
+      // ---- F016: 保存图片 ----
+      case "save_image": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (!canvasManager.hasObjects()) {
+          voiceFeedback.info("画布为空，没有可保存的内容");
+          return;
+        }
+        canvasManager.saveToPNG();
+        store.setHasUnsavedContent(false);
+        voiceFeedback.saveImage();
+        addLog("图片已保存为PNG");
+        break;
+      }
+
+      // ---- F017: 自定义画布尺寸 ----
+      case "canvas_resize": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const rw = cmd.params.width as number | undefined;
+        const rh = cmd.params.height as number | undefined;
+        if (!rw || !rh || rw < 200 || rh < 200 || rw > 4000 || rh > 4000) {
+          voiceFeedback.guidance("请指定有效的画布尺寸，比如宽800高600，最小200最大4000");
+          return;
+        }
+        canvasManager.resize(rw, rh);
+        store.setCanvasConfig({ width: rw, height: rh });
+        voiceFeedback.canvasResize(rw, rh);
+        addLog(`画布调整 → ${rw}x${rh}`);
+        break;
+      }
+
+      // ---- F018: 画布平移 ----
+      case "canvas_pan": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const dir = cmd.params.direction as string;
+        const amt = (cmd.params.amount as number) || 100;
+        canvasManager.pan(dir, amt);
+        const dirLabel: Record<string, string> = { up: "上", down: "下", left: "左", right: "右" };
+        voiceFeedback.canvasPan(dirLabel[dir] || dir, amt);
+        addLog(`画布平移 → ${dirLabel[dir] || dir} ${amt}px`);
+        break;
+      }
+
+      // ---- F019: 绘制五角星 ----
+      case "draw_star": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const starSize = canvasManager.getSize()!;
+        const starPos = cmd.params.position as { x: number; y: number } | null;
+        const starR = (cmd.params.radius as number) || (cmd.params.size as number) || 60;
+        const scx = starPos ? starPos.x * starSize.width : starSize.width / 2;
+        const scy = starPos ? starPos.y * starSize.height : starSize.height / 2;
+        canvasManager.drawStar(scx, scy, starR);
+        voiceFeedback.drawStar();
+        addLog(`绘制五角星 r=${starR}`);
+        break;
+      }
+
+      // ---- F020: 绘制多边形 ----
+      case "draw_polygon": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.needCanvas();
+          return;
+        }
+        const polySize = canvasManager.getSize()!;
+        const polyPos = cmd.params.position as { x: number; y: number } | null;
+        const polyR = (cmd.params.radius as number) || (cmd.params.size as number) || 60;
+        const polySides = (cmd.params.sides as number) || 6;
+        const pcx = polyPos ? polyPos.x * polySize.width : polySize.width / 2;
+        const pcy = polyPos ? polyPos.y * polySize.height : polySize.height / 2;
+        canvasManager.drawPolygon(pcx, pcy, polyR, polySides);
+        voiceFeedback.drawPolygon(polySides);
+        addLog(`绘制${polySides}边形 r=${polyR}`);
+        break;
+      }
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;

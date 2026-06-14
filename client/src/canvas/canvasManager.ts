@@ -1,7 +1,7 @@
 ﻿// 画布管理器 — 封装 Fabric.js Canvas 生命周期
 // 负责创建、销毁、清空画布，撤销/恢复操作历史栈，视图缩放，以及基础绘图
 
-import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle } from "fabric";
+import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle, Point, Polygon } from "fabric";
 import { useAppStore } from "../stores/appStore";
 
 export interface CanvasConfig {
@@ -14,6 +14,7 @@ export interface BrushStyle {
   color: string;
   strokeWidth: number;
   fill: string;
+  dashArray: number[];
 }
 
 class CanvasManager {
@@ -262,9 +263,84 @@ class CanvasManager {
     );
   }
 
+  // ========== F015: 删除最近绘制的图形 ==========
+
+  deleteLast(): boolean {
+    if (!this.canvas) return false;
+    const objs = this.canvas.getObjects();
+    // 倒序遍历，跳过网格线（selectable=false 且 evented=false）
+    for (let i = objs.length - 1; i >= 0; i--) {
+      const obj = objs[i];
+      if (obj.selectable !== false || obj.evented !== false) {
+        this.canvas.remove(obj);
+        this.renderCanvas();
+        this.saveSnapshot();
+        console.log("[Canvas] 已删除最近图形，剩余对象数:", this.canvas.getObjects().length);
+        return true;
+      }
+    }
+    return false;
+  }
+
   getSize(): { width: number; height: number } | null {
     if (!this.canvas) return null;
     return { width: this.logicalWidth, height: this.logicalHeight };
+  }
+
+  // ========== F016: 保存为PNG ==========
+
+  saveToPNG(filename = "drawing.png"): boolean {
+    if (!this.canvas) return false;
+    const dataURL = this.canvas.toDataURL({ format: "png", multiplier: 2 });
+    const link = document.createElement("a");
+    link.download = filename;
+    link.href = dataURL;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    console.log("[Canvas] 图片已保存:", filename);
+    return true;
+  }
+
+  // ========== F017: 自定义画布尺寸 ==========
+
+  resize(width: number, height: number): boolean {
+    if (!this.canvas) return false;
+    // 移除旧网格线（selectable=false 且 evented=false）
+    const objs = this.canvas.getObjects();
+    for (const obj of objs) {
+      if (obj.selectable === false && obj.evented === false) {
+        this.canvas.remove(obj);
+      }
+    }
+    // 更新尺寸
+    this.logicalWidth = width;
+    this.logicalHeight = height;
+    this.canvas.setWidth(width);
+    this.canvas.setHeight(height);
+    // 重建网格
+    this.addGrid();
+    this.canvas.renderAll();
+    this.saveSnapshot();
+    console.log("[Canvas] 画布已调整为", width, "x", height);
+    return true;
+  }
+
+  // ========== F018: 画布平移 ==========
+
+  pan(direction: string, amount = 100): boolean {
+    if (!this.canvas) return false;
+    let dx = 0, dy = 0;
+    switch (direction) {
+      case "up":    dy = -amount; break;
+      case "down":  dy =  amount; break;
+      case "left":  dx = -amount; break;
+      case "right": dx =  amount; break;
+    }
+    this.canvas.relativePan(new Point(dx, dy));
+    this.canvas.renderAll();
+    console.log("[Canvas] 画布平移:", direction, amount, "px");
+    return true;
   }
 
   // ========== 画笔样式 ==========
@@ -275,6 +351,7 @@ class CanvasManager {
       color: store.brushColor,
       strokeWidth: store.brushStrokeWidth,
       fill: store.brushFill,
+      dashArray: store.brushDashArray,
     };
   }
 
@@ -286,7 +363,11 @@ class CanvasManager {
       selectable: false,
       evented: true,
     };
-    opts.fill = s.fill && s.fill !== "" ? s.fill : "rgba(255,0,0,0.15)";
+    opts.fill = s.fill === "none" ? "" : (s.fill && s.fill !== "" ? s.fill : "rgba(255,0,0,0.15)");
+    // F022: 虚线/点划线
+    if (s.dashArray && s.dashArray.length > 0) {
+      opts.strokeDashArray = s.dashArray;
+    }
     return opts;
   }
 
@@ -299,13 +380,19 @@ class CanvasManager {
 
   drawLine(x1: number, y1: number, x2: number, y2: number): void {
     if (!this.canvas) return;
-    const line = new Line([x1, y1, x2, y2], {
-      stroke: this.getBrushStyle().color || "#000000",
-      strokeWidth: this.getBrushStyle().strokeWidth || 3,
+    const style = this.getBrushStyle();
+    const lineOpts: Record<string, unknown> = {
+      stroke: style.color || "#000000",
+      strokeWidth: style.strokeWidth || 3,
       selectable: false,
       evented: true,
       strokeLineCap: "round",
-    });
+    };
+    // F022: 虚线/点划线
+    if (style.dashArray && style.dashArray.length > 0) {
+      lineOpts.strokeDashArray = style.dashArray;
+    }
+    const line = new Line([x1, y1, x2, y2], lineOpts);
     this.canvas.add(line);
     this.renderCanvas();
     console.log("[Canvas] 直线已添加，对象数:", this.canvas.getObjects().length);
@@ -375,7 +462,45 @@ class CanvasManager {
     this.saveSnapshot();
   }
 
-  
+  // ========== F019: 绘制五角星 ==========
+
+  drawStar(cx: number, cy: number, outerR: number, innerR?: number, numPoints = 5): void {
+    if (!this.canvas) return;
+    const opts = this.shapeOpts();
+    const r2 = innerR ?? Math.round(outerR * 0.382);
+    const vertices: { x: number; y: number }[] = [];
+    // 从顶部开始，交替外顶点和内顶点
+    for (let i = 0; i < numPoints * 2; i++) {
+      const angle = (Math.PI / 2) * -1 + (Math.PI / numPoints) * i;
+      const r = i % 2 === 0 ? outerR : r2;
+      vertices.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+    }
+    const star = new Polygon(vertices, { ...opts, originX: "center", originY: "center" });
+    this.canvas.add(star);
+    this.renderCanvas();
+    console.log("[Canvas] 五角星已添加，对象数:", this.canvas.getObjects().length);
+    this.saveSnapshot();
+  }
+
+  // ========== F020: 绘制多边形 ==========
+
+  drawPolygon(cx: number, cy: number, radius: number, sides: number): void {
+    if (!this.canvas) return;
+    const opts = this.shapeOpts();
+    const vertices: { x: number; y: number }[] = [];
+    // 从顶部开始
+    for (let i = 0; i < sides; i++) {
+      const angle = (Math.PI / 2) * -1 + (2 * Math.PI / sides) * i;
+      vertices.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+    }
+    const polygon = new Polygon(vertices, { ...opts, originX: "center", originY: "center" });
+    this.canvas.add(polygon);
+    this.renderCanvas();
+    console.log(`[Canvas] ${sides}边形已添加，对象数:`, this.canvas.getObjects().length);
+    this.saveSnapshot();
+  }
+
+
 }
 
 export const canvasManager = new CanvasManager();
