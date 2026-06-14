@@ -490,6 +490,140 @@ export default function App() {
         addLog(`绘制${polySides}边形 r=${polyR}`);
         break;
       }
+      // ---- F023: 选中图形 ----
+      case "select_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const selMode = cmd.params.mode as string;
+        if (selMode === "last") {
+          const obj = canvasManager.selectLast();
+          if (obj) {
+  
+  voiceFeedback.selectShape("已选中最近绘制的图形");
+            addLog("选中最近图形");
+          } else {
+            voiceFeedback.nothingToSelect();
+          }
+        } else if (selMode === "type") {
+          const shapeType = (cmd.params.shapeType as string) || "圆形";
+          const obj = canvasManager.selectByType(shapeType);
+          if (obj) {
+  
+  voiceFeedback.selectShape(`已选中${shapeType}`);
+            addLog(`选中${shapeType}`);
+          } else {
+            voiceFeedback.nothingToSelect();
+          }
+        } else if (selMode === "all") {
+          const count = canvasManager.selectAll();
+          if (count > 0) {
+            voiceFeedback.selectShape(`已全选${count}个图形`);
+            addLog(`全选 ${count} 个图形`);
+          } else {
+            voiceFeedback.nothingToSelect();
+          }
+        } else if (selMode === "deselect") {
+          canvasManager.deselectAll();
+          voiceFeedback.selectShape("已取消选中");
+          addLog("取消选中");
+        }
+        break;
+      }
+
+      // ---- F024: 移动图形 ----
+      case "move_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const mDir = cmd.params.direction as string;
+        const mAmt = (cmd.params.amount as number) || 50;
+        if (canvasManager.moveSelected(mDir, mAmt)) {
+          voiceFeedback.moveShape(mDir, mAmt);
+          addLog(`图形移动 → ${mDir} ${mAmt}px`);
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+
+      // ---- F025: 缩放图形 ----
+      case "scale_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const factor = (cmd.params.factor as number) || 1.2;
+        if (canvasManager.scaleSelected(factor)) {
+          voiceFeedback.scaleShape(factor > 1);
+          addLog(`图形缩放 → ${Math.round(factor * 100)}%`);
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+
+      // ---- F026: 旋转图形 ----
+      case "rotate_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const angle = (cmd.params.angle as number) || 45;
+        if (canvasManager.rotateSelected(angle)) {
+          voiceFeedback.rotateShape(angle);
+          addLog(`图形旋转 → ${angle}°`);
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+
+      // ---- F027: 复制图形 ----
+      case "copy_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (canvasManager.copySelected()) {
+          voiceFeedback.copyShape();
+          addLog("图形已复制");
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+
+      // ---- F027: 粘贴图形 ----
+      case "paste_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        canvasManager.pasteSelected();
+        voiceFeedback.pasteShape();
+        addLog("图形已粘贴");
+        break;
+      }
+
+      // ---- F028: 翻转图形 ----
+      case "flip_shape": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const flipDir = (cmd.params.direction as string) || "horizontal";
+        if (canvasManager.flipSelected(flipDir as "horizontal" | "vertical")) {
+          voiceFeedback.flipShape(flipDir);
+          addLog(`图形翻转 → ${flipDir}`);
+        } else {
+          voiceFeedback.noShapeSelected();
+        }
+        break;
+      }
+
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;

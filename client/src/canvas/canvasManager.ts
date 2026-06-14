@@ -1,7 +1,7 @@
 ﻿// 画布管理器 — 封装 Fabric.js Canvas 生命周期
 // 负责创建、销毁、清空画布，撤销/恢复操作历史栈，视图缩放，以及基础绘图
 
-import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle, Point, Polygon } from "fabric";
+import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle, Point, Polygon, ActiveSelection, FabricObject } from "fabric";
 import { useAppStore } from "../stores/appStore";
 
 export interface CanvasConfig {
@@ -498,6 +498,164 @@ class CanvasManager {
     this.renderCanvas();
     console.log(`[Canvas] ${sides}边形已添加，对象数:`, this.canvas.getObjects().length);
     this.saveSnapshot();
+  }
+
+  // ========== F023: 选中图形 ==========
+
+  /** 获取画布绘制对象（排除网格线） */
+  private getUserObjects(): FabricObject[] {
+    if (!this.canvas) return [];
+    return this.canvas.getObjects().filter(
+      (o) => o.selectable !== false || o.evented !== false
+    );
+  }
+
+  /** 选中最后绘制的图形 */
+  selectLast(): FabricObject | null {
+    if (!this.canvas) return null;
+    const objs = this.getUserObjects();
+    if (objs.length === 0) return null;
+    const target = objs[objs.length - 1];
+    this.canvas.setActiveObject(target);
+    this.renderCanvas();
+    console.log("[Canvas] 已选中最近图形:", target.type);
+    return target;
+  }
+
+  /** 按类型选中第一个匹配的图形 */
+  selectByType(type: string): FabricObject | null {
+    if (!this.canvas) return null;
+    const typeMap: Record<string, string> = {
+      "圆": "circle", "圆形": "circle",
+      "矩形": "rect", "长方形": "rect", "正方形": "rect",
+      "三角": "triangle", "三角形": "triangle",
+      "直线": "line", "线": "line",
+      "五角星": "polygon", "星形": "polygon", "星星": "polygon",
+      "多边形": "polygon",
+    };
+    const fabricType = typeMap[type] || type;
+    const objs = this.getUserObjects();
+    let target: FabricObject | null = null;
+    for (let i = objs.length - 1; i >= 0; i--) {
+      if (objs[i].type === fabricType) { target = objs[i]; break; }
+    }
+    if (!target) target = objs[objs.length - 1] ?? null;
+    if (!target) return null;
+    this.canvas.setActiveObject(target);
+    this.renderCanvas();
+    console.log("[Canvas] 按类型选中:", type, "→", target.type);
+    return target;
+  }
+
+  /** 全选 */
+  selectAll(): number {
+    if (!this.canvas) return 0;
+    const objs = this.getUserObjects();
+    if (objs.length === 0) return 0;
+    const sel = new ActiveSelection(objs, { canvas: this.canvas });
+    this.canvas.setActiveObject(sel);
+    this.renderCanvas();
+    console.log("[Canvas] 全选:", objs.length, "个对象");
+    return objs.length;
+  }
+
+  /** 取消选中 */
+  deselectAll(): void {
+    if (!this.canvas) return;
+    this.canvas.discardActiveObject();
+    this.renderCanvas();
+    console.log("[Canvas] 已取消选中");
+  }
+
+  // ========== F024: 移动图形 ==========
+
+  moveSelected(direction: string, amount = 50): boolean {
+    const obj = this.canvas?.getActiveObject();
+    if (!obj) return false;
+    const dx = direction === "left" ? -amount : direction === "right" ? amount : 0;
+    const dy = direction === "up" ? -amount : direction === "down" ? amount : 0;
+    obj.set({ left: (obj.left ?? 0) + dx, top: (obj.top ?? 0) + dy });
+    obj.setCoords();
+    this.renderCanvas();
+    this.saveSnapshot();
+    console.log("[Canvas] 图形移动:", direction, amount, "px");
+    return true;
+  }
+
+  // ========== F025: 缩放图形 ==========
+
+  scaleSelected(factor: number): boolean {
+    const obj = this.canvas?.getActiveObject();
+    if (!obj) return false;
+    const newScaleX = Math.min(5, Math.max(0.2, (obj.scaleX ?? 1) * factor));
+    const newScaleY = Math.min(5, Math.max(0.2, (obj.scaleY ?? 1) * factor));
+    obj.set({ scaleX: newScaleX, scaleY: newScaleY });
+    obj.setCoords();
+    this.renderCanvas();
+    this.saveSnapshot();
+    console.log("[Canvas] 图形缩放: factor=", factor, "→", newScaleX);
+    return true;
+  }
+
+  // ========== F026: 旋转图形 ==========
+
+  rotateSelected(angle: number, absolute = false): boolean {
+    const obj = this.canvas?.getActiveObject();
+    if (!obj) return false;
+    const newAngle = absolute ? angle : (obj.angle ?? 0) + angle;
+    obj.set({ angle: ((newAngle % 360) + 360) % 360 });
+    obj.setCoords();
+    this.renderCanvas();
+    this.saveSnapshot();
+    console.log("[Canvas] 图形旋转:", angle, "° →", obj.angle, "°");
+    return true;
+  }
+
+  // ========== F027: 复制粘贴 ==========
+
+  private clipboard: FabricObject | null = null;
+
+  copySelected(): boolean {
+    const obj = this.canvas?.getActiveObject();
+    if (!obj) return false;
+    obj.clone().then((cloned: FabricObject) => {
+      this.clipboard = cloned;
+      console.log("[Canvas] 已复制图形到剪贴板");
+    });
+    return true;
+  }
+
+  pasteSelected(): FabricObject | null {
+    if (!this.canvas || !this.clipboard) return null;
+    this.clipboard.clone().then((cloned: FabricObject) => {
+      cloned.set({
+        left: (cloned.left ?? 0) + 30,
+        top: (cloned.top ?? 0) + 30,
+      });
+      this.canvas!.add(cloned);
+      this.canvas!.setActiveObject(cloned);
+      this.renderCanvas();
+      this.saveSnapshot();
+      console.log("[Canvas] 已粘贴图形");
+    });
+    return null; // async, return immediately
+  }
+
+  // ========== F028: 翻转图形 ==========
+
+  flipSelected(direction: "horizontal" | "vertical"): boolean {
+    const obj = this.canvas?.getActiveObject();
+    if (!obj) return false;
+    if (direction === "horizontal") {
+      obj.set({ flipX: !obj.flipX });
+    } else {
+      obj.set({ flipY: !obj.flipY });
+    }
+    obj.setCoords();
+    this.renderCanvas();
+    this.saveSnapshot();
+    console.log("[Canvas] 图形翻转:", direction);
+    return true;
   }
 
 
