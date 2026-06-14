@@ -187,7 +187,17 @@ class VoiceFeedbackService {
     this.success(dir === "horizontal" ? "图形已水平翻转" : "图形已垂直翻转");
   }
 
-  stop(): void { ttsService.stop(); }
+  pauseSpeech(): void {
+    this.emit({ type: "info", message: "已暂停，说继续恢复" });
+    ttsService.speak("已暂停，说继续恢复");
+  }
+
+  resumeSpeech(): void {
+    this.emit({ type: "info", message: "已恢复语音识别" });
+    ttsService.speakImmediate("已恢复");
+  }
+
+    stop(): void { ttsService.stop(); }
 }
 
 export const voiceFeedback = new VoiceFeedbackService();

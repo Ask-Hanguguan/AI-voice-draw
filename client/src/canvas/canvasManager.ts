@@ -126,19 +126,25 @@ class CanvasManager {
     this.contentChanged = false;
   }
 
-  // ========== F005: 网格背景 ==========
+  // ========== F005: 网格背景（随画布缩放自适应） ==========
 
   private addGrid(): void {
     if (!this.canvas) return;
+    // 网格线扩展到画布外 2000px，确保任何缩放级别都覆盖可见区域
     const w = this.logicalWidth;
     const h = this.logicalHeight;
+    const extend = 2000;
+    const minX = -extend;
+    const maxX = w + extend;
+    const minY = -extend;
+    const maxY = h + extend;
     const gridSize = 40;
     const strokeColor = "rgba(0, 0, 0, 0.1)";
 
     // 竖线
-    for (let x = 0; x <= w; x += gridSize) {
+    for (let x = minX; x <= maxX; x += gridSize) {
       this.canvas.add(
-        new Line([x, 0, x, h], {
+        new Line([x, minY, x, maxY], {
           stroke: strokeColor,
           selectable: false,
           evented: false,
@@ -146,9 +152,9 @@ class CanvasManager {
       );
     }
     // 横线
-    for (let y = 0; y <= h; y += gridSize) {
+    for (let y = minY; y <= maxY; y += gridSize) {
       this.canvas.add(
-        new Line([0, y, w, y], {
+        new Line([minX, y, maxX, y], {
           stroke: strokeColor,
           selectable: false,
           evented: false,
