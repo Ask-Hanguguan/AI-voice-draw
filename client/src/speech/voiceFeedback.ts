@@ -121,6 +121,11 @@ class VoiceFeedbackService {
     this.success(desc);
   }
 
+  // F015: 删除最近图形
+  deleteShape(): void {
+    this.success("已删除图形");
+  }
+
   stop(): void { ttsService.stop(); }
 }
 
