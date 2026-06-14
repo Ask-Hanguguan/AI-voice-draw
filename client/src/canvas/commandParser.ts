@@ -17,6 +17,7 @@ export type CommandType =
   | "draw_triangle"
   | "brush_color"
   | "brush_width"
+  | "fill_mode"
   | "unrecognized";
 
 export interface Command {
@@ -396,6 +397,42 @@ const drawRules: Rule[] = [
       /普通/,
     ],
     extractParams: () => ({ mode: "preset", value: 4, label: "中等" }),
+  },
+  // ---- F012: 填充与描边 ----
+  {
+    type: "fill_mode",
+    patterns: [
+      /填充.*(?:红|橙|黄|绿|蓝|紫|黑|白)/,
+      /填充颜[色料]/,
+      /用.*填充/,
+      /填充.*颜色/,
+    ],
+    extractParams: (_match, text) => {
+      const color = extractColor(text);
+      return color
+        ? { mode: "fill_color", color: color.hex, colorName: color.name }
+        : { mode: "fill_color", color: null };
+    },
+  },
+  {
+    type: "fill_mode",
+    patterns: [
+      /只.*(?:显示|画|留|要).*轮廓/,
+      /轮廓模[式色]/,
+      /(?:不要|取消|去掉|关闭).*填充/,
+      /不.*填充/,
+      /空心/,
+    ],
+    extractParams: () => ({ mode: "outline" }),
+  },
+  {
+    type: "fill_mode",
+    patterns: [
+      /(?:恢复|开启|打开).*填充/,
+      /填充.*(?:恢复|开启|打开)/,
+      /需要填充/,
+    ],
+    extractParams: () => ({ mode: "default" }),
   },
 ];
 

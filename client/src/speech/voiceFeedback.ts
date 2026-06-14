@@ -116,6 +116,11 @@ class VoiceFeedbackService {
     this.success(desc);
   }
 
+  // F012: 填充与描边
+  fillMode(desc: string): void {
+    this.success(desc);
+  }
+
   stop(): void { ttsService.stop(); }
 }
 
