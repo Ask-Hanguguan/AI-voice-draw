@@ -28,9 +28,11 @@ export default function App() {
   const lastFeedbackMessage = useAppStore((s) => s.lastFeedbackMessage);
   const canvasConfig = useAppStore((s) => s.canvasConfig);
   const pendingConfirm = useAppStore((s) => s.pendingConfirm);
+  const speechPaused = useAppStore((s) => s.speechPaused);
 
   const setStatus = useAppStore((s) => s.setStatus);
   const setSpeechReady = useAppStore((s) => s.setSpeechReady);
+  const setSpeechPaused = useAppStore((s) => s.setSpeechPaused);
   const setLastRecognizedText = useAppStore((s) => s.setLastRecognizedText);
 
   const [logs, setLogs] = useState<string[]>([]);
@@ -40,6 +42,7 @@ export default function App() {
   const listeningRef = useRef(false);
   const statusRef = useRef(status);
   const restartCountRef = useRef(0);
+  const currentRecRef = useRef<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [llmOnline, setLlmOnline] = useState(false);
   const llmOnlineRef = useRef(false);
@@ -87,6 +90,21 @@ export default function App() {
         setLastText("");
         setLastRecognizedText("");
         voiceFeedback.sleep();
+        break;
+      }
+
+      // ---- 暂停/恢复语音识别 ----
+      case "pause_speech": {
+        store.setSpeechPaused(true);
+        addLog('暂停绘画 — 说「继续」恢复');
+        voiceFeedback.pauseSpeech();
+        break;
+      }
+
+      case "resume_speech": {
+        store.setSpeechPaused(false);
+        addLog("恢复绘画");
+        voiceFeedback.resumeSpeech();
         break;
       }
 
@@ -778,7 +796,18 @@ export default function App() {
     }
 
 
-    // 2. 解析指令
+    // 2. 暂停模式：仅响应恢复指令
+    if (store.speechPaused) {
+      const cleaned = text.replace(/[，。！？,!? ]/g, "");
+      if (/^(继续|继续.$|恢复|恢复绘画|开始绘画|继续识别|继续听|接着画)$/.test(cleaned)) {
+        store.setSpeechPaused(false);
+        addLog("恢复绘画");
+        voiceFeedback.resumeSpeech();
+      }
+      return;
+    }
+
+    // 3. 解析指令
     const cmd = parseCommand(text);
     addLog(`指令: ${cmd.type} ${JSON.stringify(cmd.params)}`);
 
@@ -790,6 +819,21 @@ export default function App() {
         setLastText("");
         setLastRecognizedText("");
         voiceFeedback.sleep();
+        break;
+      }
+
+      // ---- 暂停/恢复语音识别 ----
+      case "pause_speech": {
+        store.setSpeechPaused(true);
+        addLog('暂停绘画 — 说「继续」恢复');
+        voiceFeedback.pauseSpeech();
+        break;
+      }
+
+      case "resume_speech": {
+        store.setSpeechPaused(false);
+        addLog("恢复绘画");
+        voiceFeedback.resumeSpeech();
         break;
       }
 
@@ -1465,6 +1509,7 @@ export default function App() {
     }
 
     const rec = new API();
+    currentRecRef.current = rec;
     rec.continuous = false;
     rec.interimResults = true;
     rec.lang = "zh-CN";

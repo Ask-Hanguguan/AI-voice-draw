@@ -36,6 +36,8 @@ export type CommandType =
   | "brush_path"
   | "modify_shape"
   | "arrange_shapes"
+  | "pause_speech"
+  | "resume_speech"
   | "unrecognized";
 
 export interface Command {
@@ -143,6 +145,16 @@ const rules: Rule[] = [
   {
     type: "exit",
     patterns: [/^(退出|休眠|睡觉|休息)$/],
+  },
+
+  // ---- 暂停/恢复语音 ----
+  {
+    type: "pause_speech",
+    patterns: [/^(暂停|暂停.$|停止绘画|停止识别|暂停语音|暂停听)$/],
+  },
+  {
+    type: "resume_speech",
+    patterns: [/^(继续|继续.$|恢复|恢复绘画|开始绘画|继续识别|继续听|接着画)$/],
   },
 
   // ---- 新建画布 ----
@@ -829,6 +841,7 @@ const DRAWING_TRIGGERS = new Set([
   "图形", "粘贴", "复制", "选中", "选择", "全选",
   "移动", "旋转", "翻转", "删除", "平移", "放大",
   "缩小", "取消选中", "取消选择",
+  "暂停", "停止绘画", "停止识别", "继续", "恢复", "接着画",
 ]);
 
 /**

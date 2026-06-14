@@ -9,6 +9,7 @@ export default function StatusBar({ llmOnline }: StatusBarProps) {
   const status = useAppStore((s) => s.status);
   const lastFeedbackType = useAppStore((s) => s.lastFeedbackType);
   const lastFeedbackMessage = useAppStore((s) => s.lastFeedbackMessage);
+  const speechPaused = useAppStore((s) => s.speechPaused);
   const zoomLevel = useAppStore((s) => s.zoomLevel);
   const canvasConfig = useAppStore((s) => s.canvasConfig);
 
@@ -45,6 +46,9 @@ export default function StatusBar({ llmOnline }: StatusBarProps) {
               <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
             </span>
             <span className="text-green-400 font-medium">语音已激活</span>
+            {speechPaused && (
+              <span className="text-yellow-400 bg-yellow-500/10 px-1.5 py-0.5 rounded text-xs ml-1">⏸ 已暂停</span>
+            )}
           </>
         ) : (
           <>
