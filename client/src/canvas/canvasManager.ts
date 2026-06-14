@@ -286,6 +286,21 @@ class CanvasManager {
     return { width: this.logicalWidth, height: this.logicalHeight };
   }
 
+  // ========== F016: 保存为PNG ==========
+
+  saveToPNG(filename = "drawing.png"): boolean {
+    if (!this.canvas) return false;
+    const dataURL = this.canvas.toDataURL({ format: "png", multiplier: 2 });
+    const link = document.createElement("a");
+    link.download = filename;
+    link.href = dataURL;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    console.log("[Canvas] 图片已保存:", filename);
+    return true;
+  }
+
   // ========== 画笔样式 ==========
 
   getBrushStyle(): BrushStyle {

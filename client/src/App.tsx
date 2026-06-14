@@ -386,6 +386,23 @@ export default function App() {
         break;
       }
 
+      // ---- F016: 保存图片 ----
+      case "save_image": {
+        if (!canvasManager.exists()) {
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        if (!canvasManager.hasObjects()) {
+          voiceFeedback.info("画布为空，没有可保存的内容");
+          return;
+        }
+        canvasManager.saveToPNG();
+        store.setHasUnsavedContent(false);
+        voiceFeedback.saveImage();
+        addLog("图片已保存为PNG");
+        break;
+      }
+
       case "unrecognized":
         voiceFeedback.unrecognized();
         break;
