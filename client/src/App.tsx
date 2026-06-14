@@ -373,11 +373,11 @@ export default function App() {
           addLog(`填充颜色 → ${colorName || color}`);
         } else if (mode === "outline") {
           store.setBrushFill("none");
-          voiceFeedback.fillMode("已切换为轮廓模式，只显示描边");
+          voiceFeedback.fillMode("切换为轮廓模式，只显示描边");
           addLog("填充模式 → 仅轮廓");
         } else if (mode === "default") {
           store.setBrushFill("");
-          voiceFeedback.fillMode("已恢复默认填充");
+          voiceFeedback.fillMode("恢复默认填充");
           addLog("填充模式 → 默认填充");
         }
         break;
@@ -403,15 +403,15 @@ export default function App() {
         const dashMode = cmd.params.mode as string;
         if (dashMode === "dashed") {
           store.setBrushDashArray([10, 6]);
-          voiceFeedback.lineStyle("已切换为虚线");
+          voiceFeedback.lineStyle("切换为虚线");
           addLog("线条风格 → 虚线");
         } else if (dashMode === "dotted") {
           store.setBrushDashArray([3, 5]);
-          voiceFeedback.lineStyle("已切换为点划线");
+          voiceFeedback.lineStyle("切换为点划线");
           addLog("线条风格 → 点划线");
         } else {
           store.setBrushDashArray([]);
-          voiceFeedback.lineStyle("已恢复实线");
+          voiceFeedback.lineStyle("恢复实线");
           addLog("线条风格 → 实线");
         }
         break;
@@ -513,7 +513,7 @@ export default function App() {
           const obj = canvasManager.selectLast();
           if (obj) {
   
-  voiceFeedback.selectShape("已选中最近绘制的图形");
+  voiceFeedback.selectShape("选中最近绘制的图形");
             addLog("选中最近图形");
           } else {
             voiceFeedback.nothingToSelect();
@@ -523,7 +523,7 @@ export default function App() {
           const obj = canvasManager.selectByType(shapeType);
           if (obj) {
   
-  voiceFeedback.selectShape(`已选中${shapeType}`);
+  voiceFeedback.selectShape(`选中${shapeType}`);
             addLog(`选中${shapeType}`);
           } else {
             voiceFeedback.nothingToSelect();
@@ -538,7 +538,7 @@ export default function App() {
           }
         } else if (selMode === "deselect") {
           canvasManager.deselectAll();
-          voiceFeedback.selectShape("已取消选中");
+          voiceFeedback.selectShape("取消选中");
           addLog("取消选中");
         }
         break;
@@ -681,7 +681,7 @@ export default function App() {
             });
             if (obj2) {
               addLog("绘制: " + renderer2);
-              voiceFeedback.success("已绘制");
+              voiceFeedback.success("绘制");
             } else {
               voiceFeedback.guidance("无法绘制该图形");
             }
@@ -704,7 +704,7 @@ export default function App() {
           });
           if (obj) {
             addLog("绘制: " + renderer);
-            voiceFeedback.success("已绘制");
+            voiceFeedback.success("绘制");
           } else {
             voiceFeedback.guidance("无法绘制该图形");
           }
@@ -722,7 +722,7 @@ export default function App() {
         if (cmd.params.stroke) aObj.set("stroke", cmd.params.stroke);
         if (cmd.params.strokeWidth != null) aObj.set("strokeWidth", Number(cmd.params.strokeWidth));
         if (cmd.params.opacity != null) aObj.set("opacity", Number(cmd.params.opacity));
-        fc2?.renderAll(); voiceFeedback.success("已修改"); addLog("图形属性已修改");
+        fc2?.renderAll(); voiceFeedback.success("修改"); addLog("图形属性已修改");
         break;
       }
       case "arrange_shapes": {
@@ -736,7 +736,7 @@ export default function App() {
           case "bring_forward": fc3?.bringObjectForward(obj2); break;
           case "send_backward": fc3?.sendObjectBackwards(obj2); break;
         }
-        fc3?.renderAll(); voiceFeedback.success("已排列"); addLog("排列: " + op);
+        fc3?.renderAll(); voiceFeedback.success("排列"); addLog("排列: " + op);
         break;
       }
       case "unrecognized": {
@@ -1102,11 +1102,11 @@ export default function App() {
           addLog(`填充颜色 → ${colorName || color}`);
         } else if (mode === "outline") {
           store.setBrushFill("none");
-          voiceFeedback.fillMode("已切换为轮廓模式，只显示描边");
+          voiceFeedback.fillMode("切换为轮廓模式，只显示描边");
           addLog("填充模式 → 仅轮廓");
         } else if (mode === "default") {
           store.setBrushFill("");
-          voiceFeedback.fillMode("已恢复默认填充");
+          voiceFeedback.fillMode("恢复默认填充");
           addLog("填充模式 → 默认填充");
         }
         break;
@@ -1132,15 +1132,15 @@ export default function App() {
         const dashMode = cmd.params.mode as string;
         if (dashMode === "dashed") {
           store.setBrushDashArray([10, 6]);
-          voiceFeedback.lineStyle("已切换为虚线");
+          voiceFeedback.lineStyle("切换为虚线");
           addLog("线条风格 → 虚线");
         } else if (dashMode === "dotted") {
           store.setBrushDashArray([3, 5]);
-          voiceFeedback.lineStyle("已切换为点划线");
+          voiceFeedback.lineStyle("切换为点划线");
           addLog("线条风格 → 点划线");
         } else {
           store.setBrushDashArray([]);
-          voiceFeedback.lineStyle("已恢复实线");
+          voiceFeedback.lineStyle("恢复实线");
           addLog("线条风格 → 实线");
         }
         break;
@@ -1242,7 +1242,7 @@ export default function App() {
           const obj = canvasManager.selectLast();
           if (obj) {
   
-  voiceFeedback.selectShape("已选中最近绘制的图形");
+  voiceFeedback.selectShape("选中最近绘制的图形");
             addLog("选中最近图形");
           } else {
             voiceFeedback.nothingToSelect();
@@ -1252,7 +1252,7 @@ export default function App() {
           const obj = canvasManager.selectByType(shapeType);
           if (obj) {
   
-  voiceFeedback.selectShape(`已选中${shapeType}`);
+  voiceFeedback.selectShape(`选中${shapeType}`);
             addLog(`选中${shapeType}`);
           } else {
             voiceFeedback.nothingToSelect();
@@ -1267,7 +1267,7 @@ export default function App() {
           }
         } else if (selMode === "deselect") {
           canvasManager.deselectAll();
-          voiceFeedback.selectShape("已取消选中");
+          voiceFeedback.selectShape("取消选中");
           addLog("取消选中");
         }
         break;
@@ -1401,7 +1401,7 @@ export default function App() {
             if (obj2) {
               console.log("[draw_shape] 延迟渲染成功，对象数:", fc2.getObjects().length);
               addLog("绘制: " + renderer2);
-              voiceFeedback.success("已绘制");
+              voiceFeedback.success("绘制");
             } else {
               console.warn("[draw_shape] 延迟渲染返回 null");
               voiceFeedback.guidance("无法绘制该图形");
@@ -1427,7 +1427,7 @@ export default function App() {
           if (obj) {
             console.log("[draw_shape] 图形已添加到画布，对象数量:", fc.getObjects().length);
             addLog("绘制: " + renderer);
-            voiceFeedback.success("已绘制");
+            voiceFeedback.success("绘制");
           } else {
             console.warn("[draw_shape] drawShape 返回 null，渲染器:", renderer);
             voiceFeedback.guidance("无法绘制该图形");
@@ -1446,7 +1446,7 @@ export default function App() {
         if (cmd.params.stroke) aObj.set("stroke", cmd.params.stroke);
         if (cmd.params.strokeWidth != null) aObj.set("strokeWidth", Number(cmd.params.strokeWidth));
         if (cmd.params.opacity != null) aObj.set("opacity", Number(cmd.params.opacity));
-        fc2?.renderAll(); voiceFeedback.success("已修改"); addLog("图形属性已修改");
+        fc2?.renderAll(); voiceFeedback.success("修改"); addLog("图形属性已修改");
         break;
       }
       case "arrange_shapes": {
@@ -1460,7 +1460,7 @@ export default function App() {
           case "bring_forward": fc3?.bringObjectForward(obj2); break;
           case "send_backward": fc3?.sendObjectBackwards(obj2); break;
         }
-        fc3?.renderAll(); voiceFeedback.success("已排列"); addLog("排列: " + op);
+        fc3?.renderAll(); voiceFeedback.success("排列"); addLog("排列: " + op);
         break;
       }
 
