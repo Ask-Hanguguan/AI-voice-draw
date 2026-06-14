@@ -202,7 +202,7 @@ function buildTools(): ToolDefinition[] {
     // ---- 复杂图形（渲染器） ----
     {
       name: "draw_shape",
-      description: "绘制复杂图形。支持：云朵、心形、箭头、圆角矩形、对话框、月牙、水滴、十字、雪花、太阳、花、树、不规则气泡。用户说画云、画爱心、画箭头、画树等时调用。",
+      description: buildDrawShapeDescription(),
       parameters: {
         type: "object",
         properties: {
@@ -390,6 +390,42 @@ function buildTools(): ToolDefinition[] {
       description: "保存画布为图片。用户说保存、导出、下载时调用。",
       parameters: { type: "object", properties: {}, required: [] },
     },
+
+    // ---- LLM 画笔自由绘制 ----
+    {
+      name: "brush_path",
+      description:
+        "【画笔模式】当用户描述的图形没有对应的预定义工具时，必须使用此工具自由绘制。用 SVG 路径表达任意形状。" +
+        "画布坐标系：左上角(0,0)，默认画布800x600，中心(400,300)。" +
+        "颜色使用hex格式如#FF0000。默认描边宽度2px。" +
+        "支持多笔笔触：每笔一个SVG路径字符串。",
+      parameters: {
+        type: "object",
+        properties: {
+          strokes: {
+            type: "array",
+            description:
+              "画笔笔触数组。每笔包含 pathData(SVG路径字符串)、fill(填充色)、stroke(描边色)、strokeWidth(描边宽度)",
+            items: {
+              type: "object",
+              properties: {
+                pathData: {
+                  type: "string",
+                  description:
+                    "SVG path data，如 'M 400 300 L 420 280 Q 440 260 460 280 Z'。" +
+                    "常用命令：M=移动到, L=画线到, Q=二次贝塞尔, C=三次贝塞尔, A=圆弧, Z=闭合路径",
+                },
+                fill: { type: "string", description: "填充色(hex)" },
+                stroke: { type: "string", description: "描边色(hex)" },
+                strokeWidth: { type: "number", description: "描边宽度，默认2" },
+              },
+              required: ["pathData"],
+            },
+          },
+        },
+        required: ["strokes"],
+      },
+    },
   ];
 
   return tools;
@@ -414,17 +450,33 @@ function buildComplexShapeTable(): string {
     .join("\n");
 }
 
+function buildDrawShapeDescription(): string {
+  const aliases = (spec.complexShapes || []).flatMap((s: any) => s.aliases || []);
+  return "绘制复杂图形。支持：" + aliases.join("、") + "。用户描述这些物体时优先调用此工具。";
+}
+
 // ========== System Prompt ==========
 function buildSystemPrompt(): string {
-  return `你是一个语音绘图指令解析器。用户通过语音说出绘图指令，你需要调用合适的工具来执行操作。
+  return `你是一个语音绘图指令解析器，也是一个持有画笔的画家。用户通过语音说出绘图指令，你需要选择合适的工具来执行。
 
-## 重要规则
-1. 必须调用工具来执行操作，不要只回复文字
-2. 如果用户说的是闲聊或与绘图无关的内容，不调用任何工具
-3. 位置参数(x, y)使用相对比例0~1，如中间=(0.5, 0.5)，左上=(0.2, 0.2)
-4. 颜色参数使用十六进制格式如#FF0000
-5. 复杂多步指令应依次调用多个工具
-6. 单个复杂指令如果可以用一个工具完成就不要拆分（如"画一个红色的云"=一次draw_shape调用）
+## 核心规则
+1. 必须调用工具，不要只回复文字。闲聊/非绘图内容不调用任何工具
+2. 工具选择优先级：
+   - 已有预定义工具（draw_shape/draw_circle/draw_rectangle等）→ 优先使用
+   - 无法用现有工具表达的 → 必须使用 brush_path 自由绘制，哪怕路径粗糙也要尝试，不要放弃
+3. 位置坐标使用像素坐标，默认画布800x600，中心(400,300)
+4. 颜色使用十六进制如#FF0000，透明度0~1
+
+## draw_brush_path 画笔模式
+当用户的需求无法用预定义图形工具完成时，你就成了画笔。使用 SVG 路径语法绘制：
+- M x y = 移动起点
+- L x y = 画直线
+- Q cpx cpy x y = 二次贝塞尔曲线
+- C cp1x cp1y cp2x cp2y x y = 三次贝塞尔曲线
+- A rx ry rotation large sweep x y = 圆弧
+- Z = 闭合路径回到起点
+
+坐标范围：x(0-800), y(0-600)，左上角原点。笔触越少越好，一个复杂图形尽量用一笔pathData完成。
 
 ## 颜色参考
 ${buildColorTable()}
@@ -437,8 +489,10 @@ ${buildComplexShapeTable()}
 
 ## 示例
 - "画一个红色爱心" → draw_shape(renderer="heart", fill="#FF0000")
-- "在右下角画一朵白云" → draw_shape(renderer="cloud", fill="#FFFFFF", x=0.8, y=0.8)
-- "把选中的图形变成蓝色" → modify_shape(fill="#0066FF")
+- "在右下角画一朵白云" → draw_shape(renderer="cloud", x=0.8, y=0.8)
+- "画一只小猫" → brush_path(strokes=[{pathData:"M 400 350 Q 350 250 300 280 Q 320 350 400 350 Z", stroke:"#333", strokeWidth:2}, {pathData:"M 380 340 L 370 330 M 380 340 L 390 330", stroke:"#333", strokeWidth:1.5}])
+- "用蓝色画一条波浪线" → brush_path(strokes=[{pathData:"M 100 300 Q 200 200 300 300 Q 400 200 500 300", stroke:"#0066FF"}])
+- "画一个红色爱心" → draw_shape(renderer="heart", fill="#FF0000")
 - "今天的天气真好" → 不调用工具`;
 }
 

@@ -751,6 +751,197 @@
                                               "斑点"
                                           ],
                               "renderer":  "blob"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  120,
+                                                    "fill":  "#808080",
+                                                    "stroke":  "#555555"
+                                                },
+                              "aliases":  [
+                                              "猫",
+                                              "小猫",
+                                              "猫咪"
+                                          ],
+                              "renderer":  "cat"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  120,
+                                                    "fill":  "#c8956c",
+                                                    "stroke":  "#8b5e3c"
+                                                },
+                              "aliases":  [
+                                              "狗",
+                                              "小狗",
+                                              "狗狗"
+                                          ],
+                              "renderer":  "dog"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  80,
+                                                    "fill":  "#e74c3c",
+                                                    "stroke":  "#c0392b"
+                                                },
+                              "aliases":  [
+                                              "鸟",
+                                              "小鸟",
+                                              "鸟儿"
+                                          ],
+                              "renderer":  "bird"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  100,
+                                                    "fill":  "#f39c12",
+                                                    "stroke":  "#e67e22"
+                                                },
+                              "aliases":  [
+                                              "鱼",
+                                              "小鱼",
+                                              "鱼儿"
+                                          ],
+                              "renderer":  "fish"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  80,
+                                                    "fill":  "#e91e63",
+                                                    "stroke":  "#c2185b"
+                                                },
+                              "aliases":  [
+                                              "蝴蝶",
+                                              "蝴蝶形"
+                                          ],
+                              "renderer":  "butterfly"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  100,
+                                                    "fill":  "#f5deb3",
+                                                    "stroke":  "#8b7355"
+                                                },
+                              "aliases":  [
+                                              "房子",
+                                              "房屋",
+                                              "屋子"
+                                          ],
+                              "renderer":  "house"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  150,
+                                                    "fill":  "#e74c3c",
+                                                    "stroke":  "#c0392b"
+                                                },
+                              "aliases":  [
+                                              "汽车",
+                                              "车",
+                                              "小车"
+                                          ],
+                              "renderer":  "car"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  100,
+                                                    "fill":  "#8b4513",
+                                                    "stroke":  "#5c2e00"
+                                                },
+                              "aliases":  [
+                                              "船",
+                                              "小船",
+                                              "帆船"
+                                          ],
+                              "renderer":  "boat"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  120,
+                                                    "fill":  "#7f8c8d",
+                                                    "stroke":  "#636e72"
+                                                },
+                              "aliases":  [
+                                              "山",
+                                              "山峰",
+                                              "山脉"
+                                          ],
+                              "renderer":  "mountain"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  100,
+                                                    "fill":  "#f1c40f",
+                                                    "stroke":  "#d4a017"
+                                                },
+                              "aliases":  [
+                                              "闪电",
+                                              "雷电"
+                                          ],
+                              "renderer":  "lightning"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  50,
+                                                    "fill":  "#333333",
+                                                    "stroke":  "#000000"
+                                                },
+                              "aliases":  [
+                                              "音符",
+                                              "音乐符号",
+                                              "乐符"
+                                          ],
+                              "renderer":  "music_note"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  80,
+                                                    "fill":  "#e74c3c",
+                                                    "stroke":  "#c0392b"
+                                                },
+                              "aliases":  [
+                                              "蘑菇",
+                                              "菌菇"
+                                          ],
+                              "renderer":  "mushroom"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  80,
+                                                    "fill":  "#2ecc71",
+                                                    "stroke":  "#27ae60"
+                                                },
+                              "aliases":  [
+                                              "叶子",
+                                              "树叶",
+                                              "叶片"
+                                          ],
+                              "renderer":  "leaf"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  80,
+                                                    "fill":  "#3498db",
+                                                    "stroke":  "#2980b9"
+                                                },
+                              "aliases":  [
+                                              "眼睛",
+                                              "眼球"
+                                          ],
+                              "renderer":  "eye"
+                          },
+                          {
+                              "defaultParams":  {
+                                                    "size":  80,
+                                                    "fill":  "#f1c40f",
+                                                    "stroke":  "#d4a017"
+                                                },
+                              "aliases":  [
+                                              "皇冠",
+                                              "王冠",
+                                              "王冕"
+                                          ],
+                              "renderer":  "crown"
                           }
                       ]
 }

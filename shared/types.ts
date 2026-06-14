@@ -34,6 +34,7 @@ export type CommandType =
   | "flip_shape"
   | "modify_shape"
   | "arrange_shapes"
+  | "brush_path"
   | "save_image"
   | "unrecognized";
 
@@ -61,6 +62,12 @@ export interface ToolParameter {
   description: string;
   enum?: string[];
   default?: unknown;
+  /** 数组类型的子元素 schema */
+  items?: {
+    type: "object";
+    properties: Record<string, ToolParameter>;
+    required: string[];
+  };
 }
 
 export interface ToolDefinition {
@@ -139,4 +146,26 @@ export interface RendererParams {
   opacity?: number;
   rotation?: number;
   extras?: Record<string, number>;
+}
+
+// ========== LLM 画笔路径（Brush Path Drawing） ==========
+
+/** 单笔笔触命令 */
+export interface BrushStroke {
+  /** SVG 路径数据，如 "M 400 300 L 420 280 Q 440 260 460 280" */
+  pathData: string;
+  /** 填充色 (hex) */
+  fill?: string;
+  /** 描边色 (hex) */
+  stroke?: string;
+  /** 描边宽度 */
+  strokeWidth?: number;
+  /** 透明度 0~1 */
+  opacity?: number;
+}
+
+/** 画笔路径绘制参数 */
+export interface BrushPathParams {
+  /** 画笔笔触数组，按顺序执行 */
+  strokes: BrushStroke[];
 }

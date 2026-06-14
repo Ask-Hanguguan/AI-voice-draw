@@ -33,6 +33,7 @@ export type CommandType =
   | "paste_shape"
   | "flip_shape"
   | "draw_shape"
+  | "brush_path"
   | "modify_shape"
   | "arrange_shapes"
   | "unrecognized";

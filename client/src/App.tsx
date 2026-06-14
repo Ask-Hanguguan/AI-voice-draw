@@ -7,6 +7,7 @@ import { canvasManager } from "./canvas/canvasManager";
 import { parseWithLLM, isLLMAvailable } from "./api/commandClient";
 import { correctHotwords } from "./speech/hotwordCorrector";
 import type { Command } from "./canvas/commandParser";
+import type { BrushStroke } from "@shared/types.ts";
 import StatusBar from "./components/StatusBar";
 import Canvas from "./components/Canvas";
 
@@ -614,6 +615,27 @@ export default function App() {
         } else {
           voiceFeedback.noShapeSelected();
         }
+        break;
+      }
+
+      // ---- LLM 画笔自由绘制 ----
+      case "brush_path": {
+        if (!canvasManager.exists()) {
+          console.warn("[brush_path] 画布不存在，自动创建默认800x600画布");
+          addLog("自动创建画布 800x600");
+          store.setCanvasConfig({ width: 800, height: 600 });
+          setCanvasKey((k) => k + 1);
+          voiceFeedback.guidance("请先新建画布，再说一次刚才的指令");
+          break;
+        }
+        const strokes = (cmd.params.strokes as BrushStroke[]) || [];
+        if (strokes.length === 0) {
+          voiceFeedback.guidance("画笔路径数据为空");
+          break;
+        }
+        const count = canvasManager.drawBrushPath(strokes);
+        voiceFeedback.success(`画笔绘制完成，${count}笔`);
+        addLog(`画笔路径: ${count} 笔`);
         break;
       }
 
@@ -1298,7 +1320,17 @@ export default function App() {
         }
         break;
       }
-  
+
+      // ---- LLM 画笔自由绘制 ----
+      case "brush_path": {
+        if (!canvasManager.exists()) { voiceFeedback.guidance("请先新建画布"); break; }
+        const strokes = (cmd.params.strokes as any[]) || [];
+        if (strokes.length > 0) { canvasManager.drawBrushPath(strokes); }
+        voiceFeedback.success(`${strokes.length}笔绘制完成`);
+        addLog(`画笔路径: ${strokes.length} 笔`);
+        break;
+      }
+
       case "draw_shape": {
         if (!canvasManager.exists()) {
           console.warn("[draw_shape] 画布不存在，自动创建默认800x600画布");
