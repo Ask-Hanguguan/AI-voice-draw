@@ -35,6 +35,10 @@ class CanvasManager {
     return this.canvas !== null;
   }
 
+  getCanvas(): FabricCanvas | null {
+    return this.canvas;
+  }
+
   /** 检查已有画布是否绑定在指定的 DOM 元素上（用于判断是否需要重新初始化） */
   isBoundTo(el: HTMLCanvasElement): boolean {
     if (!this.canvas) return false;

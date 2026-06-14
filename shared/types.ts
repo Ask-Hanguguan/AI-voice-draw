@@ -1,5 +1,5 @@
-// ========== 共享类型定义：前端 & 后端共用 ==========
-// 统一的指令类型，对齐前端 commandParser 与后端 commandRouter
+﻿// ========== 共享类型定义：前端 & 后端共用 ==========
+// 统一指令类型，对齐前端 commandParser 与后端 commandRouter
 
 export type CommandType =
   | "new_canvas"
@@ -19,6 +19,7 @@ export type CommandType =
   | "draw_triangle"
   | "draw_star"
   | "draw_polygon"
+  | "draw_shape"
   | "brush_color"
   | "brush_width"
   | "fill_mode"
@@ -31,6 +32,8 @@ export type CommandType =
   | "copy_shape"
   | "paste_shape"
   | "flip_shape"
+  | "modify_shape"
+  | "arrange_shapes"
   | "save_image"
   | "unrecognized";
 
@@ -47,6 +50,38 @@ export interface ParseRequest {
 export interface ParseResponse {
   type: CommandType;
   params: Record<string, unknown>;
+  raw: string;
+  error?: string;
+}
+
+// ========== 工具调用（Tool Calling）类型 ==========
+
+export interface ToolParameter {
+  type: string;
+  description: string;
+  enum?: string[];
+  default?: unknown;
+}
+
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, ToolParameter>;
+    required: string[];
+  };
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface ToolCallResponse {
+  type: "tool_calls";
+  calls: ToolCall[];
   raw: string;
   error?: string;
 }
@@ -73,6 +108,12 @@ export interface ShapeEntry {
   defaultParams: Record<string, unknown>;
 }
 
+export interface ComplexShapeEntry {
+  renderer: string;
+  aliases: string[];
+  defaultParams: Record<string, unknown>;
+}
+
 export interface ColorEntry {
   keyword: string;
   aliases: string[];
@@ -83,4 +124,19 @@ export interface SizeEntry {
   keyword: string;
   aliases: string[];
   radius: number;
+}
+
+// ========== 渲染器参数 ==========
+
+export interface RendererParams {
+  x: number;
+  y: number;
+  size: number;
+  aspect?: number;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  opacity?: number;
+  rotation?: number;
+  extras?: Record<string, number>;
 }
