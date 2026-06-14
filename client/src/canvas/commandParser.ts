@@ -20,6 +20,8 @@ export type CommandType =
   | "fill_mode"
   | "delete_shape"
   | "save_image"
+  | "canvas_resize"
+  | "canvas_pan"
   | "unrecognized";
 
 export interface Command {
@@ -87,6 +89,18 @@ function extractNumeric(text: string, keywords: string[]): number | null {
     const m = text.match(new RegExp(kw + "(\\d+)"));
     if (m) return parseInt(m[1], 10);
   }
+  return null;
+}
+
+// 辅助：提取宽高 (如 宽800 高600, 1024x768)
+function extractDimensions(text: string): { width: number; height: number } | null {
+  // 格式: 宽800 高600
+  const w1 = extractNumeric(text, ["宽度", "宽"]);
+  const h1 = extractNumeric(text, ["高度", "高"]);
+  if (w1 && h1) return { width: w1, height: h1 };
+  // 格式: 1024x768, 1024乘768, 1024*768
+  const m = text.match(/(\d{3,4})\s*[x×乘\*]\s*(\d{3,4})/);
+  if (m) return { width: parseInt(m[1], 10), height: parseInt(m[2], 10) };
   return null;
 }
 
@@ -199,6 +213,67 @@ const rules: Rule[] = [
       /^保存$/,
       /^导出$/,
     ],
+  },
+
+  // ---- F017: 自定义画布尺寸 ----
+  {
+    type: "canvas_resize",
+    patterns: [
+      /画布.*(?:大小|尺寸|宽).*/,
+      /(?:设置|调整|修改|改).*画布.*(?:大小|尺寸)/,
+      /画布.*改为?/,
+      /调整.*画布/,
+    ],
+    extractParams: (_match, text) => {
+      const dims = extractDimensions(text);
+      return dims ? { width: dims.width, height: dims.height } : {};
+    },
+  },
+
+  // ---- F018: 画布平移 ----
+  {
+    type: "canvas_pan",
+    patterns: [
+      /(?:向上|往上).*平?移/,
+      /上移/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      return { direction: "up", amount: amount || 100 };
+    },
+  },
+  {
+    type: "canvas_pan",
+    patterns: [
+      /(?:向下|往下).*平?移/,
+      /下移/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      return { direction: "down", amount: amount || 100 };
+    },
+  },
+  {
+    type: "canvas_pan",
+    patterns: [
+      /(?:向左|往左).*平?移/,
+      /左移/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      return { direction: "left", amount: amount || 100 };
+    },
+  },
+  {
+    type: "canvas_pan",
+    patterns: [
+      /(?:向右|往右).*平?移/,
+      /右移/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      return { direction: "right", amount: amount || 100 };
+    },
   },
 ];
 

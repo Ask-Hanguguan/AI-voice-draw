@@ -1,7 +1,7 @@
 ﻿// 画布管理器 — 封装 Fabric.js Canvas 生命周期
 // 负责创建、销毁、清空画布，撤销/恢复操作历史栈，视图缩放，以及基础绘图
 
-import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle } from "fabric";
+import { Canvas as FabricCanvas, Line, Circle, Ellipse, Rect, Triangle, Point } from "fabric";
 import { useAppStore } from "../stores/appStore";
 
 export interface CanvasConfig {
@@ -298,6 +298,47 @@ class CanvasManager {
     link.click();
     document.body.removeChild(link);
     console.log("[Canvas] 图片已保存:", filename);
+    return true;
+  }
+
+  // ========== F017: 自定义画布尺寸 ==========
+
+  resize(width: number, height: number): boolean {
+    if (!this.canvas) return false;
+    // 移除旧网格线（selectable=false 且 evented=false）
+    const objs = this.canvas.getObjects();
+    for (const obj of objs) {
+      if (obj.selectable === false && obj.evented === false) {
+        this.canvas.remove(obj);
+      }
+    }
+    // 更新尺寸
+    this.logicalWidth = width;
+    this.logicalHeight = height;
+    this.canvas.setWidth(width);
+    this.canvas.setHeight(height);
+    // 重建网格
+    this.addGrid();
+    this.canvas.renderAll();
+    this.saveSnapshot();
+    console.log("[Canvas] 画布已调整为", width, "x", height);
+    return true;
+  }
+
+  // ========== F018: 画布平移 ==========
+
+  pan(direction: string, amount = 100): boolean {
+    if (!this.canvas) return false;
+    let dx = 0, dy = 0;
+    switch (direction) {
+      case "up":    dy = -amount; break;
+      case "down":  dy =  amount; break;
+      case "left":  dx = -amount; break;
+      case "right": dx =  amount; break;
+    }
+    this.canvas.relativePan(new Point(dx, dy));
+    this.canvas.renderAll();
+    console.log("[Canvas] 画布平移:", direction, amount, "px");
     return true;
   }
 
