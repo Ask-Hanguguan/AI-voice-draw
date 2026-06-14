@@ -78,8 +78,8 @@ export default function App() {
   function executeParsedDirect(cmd: Command, rawText: string): void {
     const store = useAppStore.getState();
     addLog(`LLM: ${cmd.type} ${JSON.stringify(cmd.params)}`);
+    console.log("[executeParsedDirect] cmd.type =", JSON.stringify(cmd.type), "| typeof =", typeof cmd.type);
     switch (cmd.type) {
-      // ---- 退出 ----
       case "exit": {
         addLog("休眠");
         setStatus("sleeping");
@@ -616,6 +616,89 @@ export default function App() {
         }
         break;
       }
+
+      // ---- LLM 复杂图形 ----
+      case "draw_shape": {
+        if (!canvasManager.exists()) {
+          console.warn("[draw_shape] 画布不存在，自动创建默认800x600画布");
+          addLog("自动创建画布 800x600");
+          store.setCanvasConfig({ width: 800, height: 600 });
+          store.setZoomLevel(1);
+          setCanvasKey((k) => k + 1);
+          setTimeout(() => {
+            const fc2 = canvasManager.getCanvas();
+            if (!fc2) {
+              console.warn("[draw_shape] 自动创建后画布仍未就绪");
+              voiceFeedback.guidance("画布创建失败，请重试");
+              return;
+            }
+            const renderer2 = (cmd.params.renderer as string) || "cloud";
+            const obj2 = drawShape(renderer2, fc2, {
+              x: (cmd.params.x as number) ?? 0.5, y: (cmd.params.y as number) ?? 0.5, size: (cmd.params.size as number) ?? 100,
+              fill: cmd.params.fill as string, stroke: cmd.params.stroke as string,
+              strokeWidth: cmd.params.strokeWidth as number, opacity: cmd.params.opacity as number,
+              rotation: cmd.params.rotation as number, extras: cmd.params.extras as Record<string, number>,
+            });
+            if (obj2) {
+              addLog("绘制: " + renderer2);
+              voiceFeedback.success("已绘制");
+            } else {
+              voiceFeedback.guidance("无法绘制该图形");
+            }
+          }, 100);
+          return;
+        }
+        const renderer = (cmd.params.renderer as string) || "cloud";
+        const fc = canvasManager.getCanvas();
+        if (!fc) {
+          console.warn("[draw_shape] 画布实例为 null");
+          voiceFeedback.guidance("画布未就绪");
+          return;
+        }
+        try {
+          const obj = drawShape(renderer, fc, {
+            x: (cmd.params.x as number) ?? 0.5, y: (cmd.params.y as number) ?? 0.5, size: (cmd.params.size as number) ?? 100,
+            fill: cmd.params.fill as string, stroke: cmd.params.stroke as string,
+            strokeWidth: cmd.params.strokeWidth as number, opacity: cmd.params.opacity as number,
+            rotation: cmd.params.rotation as number, extras: cmd.params.extras as Record<string, number>,
+          });
+          if (obj) {
+            addLog("绘制: " + renderer);
+            voiceFeedback.success("已绘制");
+          } else {
+            voiceFeedback.guidance("无法绘制该图形");
+          }
+        } catch (err) {
+          console.error("[draw_shape] 渲染异常:", err);
+          voiceFeedback.error("图形渲染失败");
+        }
+        break;
+      }
+      case "modify_shape": {
+        if (!canvasManager.exists()) return;
+        const fc2 = canvasManager.getCanvas(); const aObj = fc2?.getActiveObject();
+        if (!aObj) { voiceFeedback.noShapeSelected(); return; }
+        if (cmd.params.fill) aObj.set("fill", cmd.params.fill);
+        if (cmd.params.stroke) aObj.set("stroke", cmd.params.stroke);
+        if (cmd.params.strokeWidth != null) aObj.set("strokeWidth", Number(cmd.params.strokeWidth));
+        if (cmd.params.opacity != null) aObj.set("opacity", Number(cmd.params.opacity));
+        fc2?.renderAll(); voiceFeedback.success("已修改"); addLog("图形属性已修改");
+        break;
+      }
+      case "arrange_shapes": {
+        if (!canvasManager.exists()) return;
+        const op = (cmd.params.operation as string) || "bring_to_front";
+        const fc3 = canvasManager.getCanvas(); const obj2 = fc3?.getActiveObject();
+        if (!obj2) { voiceFeedback.noShapeSelected(); return; }
+        switch (op) {
+          case "bring_to_front": fc3?.bringObjectToFront(obj2); break;
+          case "send_to_back": fc3?.sendObjectToBack(obj2); break;
+          case "bring_forward": fc3?.bringObjectForward(obj2); break;
+          case "send_backward": fc3?.sendObjectBackwards(obj2); break;
+        }
+        fc3?.renderAll(); voiceFeedback.success("已排列"); addLog("排列: " + op);
+        break;
+      }
       case "unrecognized": {
           setIsProcessing(true);
           addLog("LLM: 请求中...");
@@ -636,6 +719,11 @@ export default function App() {
           });
         }
         break;
+      default: {
+        console.error("[executeParsedDirect] 未匹配 LLM 指令:", JSON.stringify(cmd.type));
+        addLog("未知LLM指令: " + cmd.type);
+        break;
+      }
     }
   }
 
@@ -1213,8 +1301,36 @@ export default function App() {
   
       case "draw_shape": {
         if (!canvasManager.exists()) {
-          console.warn("[draw_shape] 画布不存在，请先新建画布");
-          voiceFeedback.guidance("请先新建画布");
+          console.warn("[draw_shape] 画布不存在，自动创建默认800x600画布");
+          addLog("自动创建画布 800x600");
+          store.setCanvasConfig({ width: 800, height: 600 });
+          store.setZoomLevel(1);
+          setCanvasKey((k) => k + 1);
+          // 画布创建是异步的（useEffect），稍后重试
+          setTimeout(() => {
+            const fc2 = canvasManager.getCanvas();
+            if (!fc2) {
+              console.warn("[draw_shape] 自动创建后画布仍未就绪");
+              voiceFeedback.guidance("画布创建失败，请重试");
+              return;
+            }
+            const renderer2 = (cmd.params.renderer as string) || "cloud";
+            console.log("[draw_shape] 延迟渲染:", renderer2);
+            const obj2 = drawShape(renderer2, fc2, {
+              x: (cmd.params.x as number) ?? 0.5, y: (cmd.params.y as number) ?? 0.5, size: (cmd.params.size as number) ?? 100,
+              fill: cmd.params.fill as string, stroke: cmd.params.stroke as string,
+              strokeWidth: cmd.params.strokeWidth as number, opacity: cmd.params.opacity as number,
+              rotation: cmd.params.rotation as number, extras: cmd.params.extras as Record<string, number>,
+            });
+            if (obj2) {
+              console.log("[draw_shape] 延迟渲染成功，对象数:", fc2.getObjects().length);
+              addLog("绘制: " + renderer2);
+              voiceFeedback.success("已绘制");
+            } else {
+              console.warn("[draw_shape] 延迟渲染返回 null");
+              voiceFeedback.guidance("无法绘制该图形");
+            }
+          }, 100);
           return;
         }
         const renderer = (cmd.params.renderer as string) || "cloud";
@@ -1294,6 +1410,11 @@ export default function App() {
         } else {
           voiceFeedback.unrecognized();
         }
+        break;
+      }
+      default: {
+        console.error("[executeCommand] 未匹配 LLM 指令:", JSON.stringify(cmd.type));
+        addLog("未知LLM指令: " + cmd.type);
         break;
       }
     }
