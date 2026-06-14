@@ -155,6 +155,38 @@ class VoiceFeedbackService {
   lineStyle(desc: string): void {
     this.success(desc);
   }
+
+  // F023: 选中图形
+  selectShape(desc: string): void { this.success(desc); }
+  nothingToSelect(): void { this.guidance("没有可选的图形"); }
+
+  // F024: 移动图形
+  moveShape(dir: string, amt: number): void {
+    const d: Record<string, string> = { up: "上", down: "下", left: "左", right: "右" };
+    this.success(`图形向${d[dir] || dir}移动${amt}像素`);
+  }
+  noShapeSelected(): void { this.guidance("请先选中一个图形"); }
+
+  // F025: 缩放图形
+  scaleShape(bigger: boolean): void {
+    this.success(bigger ? "图形已放大" : "图形已缩小");
+  }
+
+  // F026: 旋转图形
+  rotateShape(angle: number): void {
+    this.success(`图形已旋转${angle}度`);
+  }
+
+  // F027: 复制粘贴
+  copyShape(): void { this.success("图形已复制"); }
+  pasteShape(): void { this.success("图形已粘贴"); }
+  nothingToPaste(): void { this.guidance("请先复制一个图形"); }
+
+  // F028: 翻转图形
+  flipShape(dir: string): void {
+    this.success(dir === "horizontal" ? "图形已水平翻转" : "图形已垂直翻转");
+  }
+
   stop(): void { ttsService.stop(); }
 }
 

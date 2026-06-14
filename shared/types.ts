@@ -29,6 +29,8 @@ export type CommandType =
   | "scale_shape"
   | "rotate_shape"
   | "copy_shape"
+  | "paste_shape"
+  | "flip_shape"
   | "save_image"
   | "unrecognized";
 
