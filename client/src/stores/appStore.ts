@@ -19,6 +19,7 @@ interface AppState {
   status: AppStatus;
   lastRecognizedText: string;
   speechReady: boolean;
+  speechPaused: boolean;
 
   /* F002: 语音反馈 */
   lastFeedbackType: FeedbackType | null;
@@ -45,6 +46,7 @@ interface AppState {
   setStatus: (status: AppStatus) => void;
   setLastRecognizedText: (text: string) => void;
   setSpeechReady: (ready: boolean) => void;
+  setSpeechPaused: (paused: boolean) => void;
   setFeedback: (type: FeedbackType, message: string) => void;
   clearFeedback: () => void;
 
@@ -66,6 +68,7 @@ export const useAppStore = create<AppState>((set) => ({
   status: "idle",
   lastRecognizedText: "",
   speechReady: false,
+  speechPaused: false,
 
   lastFeedbackType: null,
   lastFeedbackMessage: "",
@@ -85,6 +88,7 @@ export const useAppStore = create<AppState>((set) => ({
   setStatus: (status) => set({ status }),
   setLastRecognizedText: (text) => set({ lastRecognizedText: text }),
   setSpeechReady: (ready) => set({ speechReady: ready }),
+  setSpeechPaused: (paused) => set({ speechPaused: paused }),
   setFeedback: (type, message) =>
     set({ lastFeedbackType: type, lastFeedbackMessage: message }),
   clearFeedback: () =>
