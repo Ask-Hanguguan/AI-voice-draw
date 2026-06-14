@@ -1,4 +1,4 @@
-// 指令解析器 — Phase 1 正则匹配
+﻿// 指令解析器 — Phase 1 正则匹配
 // 将语音识别文本转换为结构化绘图指令
 
 export type CommandType =
@@ -32,6 +32,9 @@ export type CommandType =
   | "copy_shape"
   | "paste_shape"
   | "flip_shape"
+  | "draw_shape"
+  | "modify_shape"
+  | "arrange_shapes"
   | "unrecognized";
 
 export interface Command {
@@ -41,6 +44,7 @@ export interface Command {
 }
 
 import spec from "@shared/instructions-spec.json";
+import { getAvailableShapes } from "./shapeGenerator";
 // ========== 画布尺寸配置 ==========
 // 从 JSON 指令规范构建画布尺寸映射
 const CANVAS_SIZES: Record<string, { width: number; height: number }> = {};
@@ -814,6 +818,8 @@ for (const verb of spec.actionVerbs) {
 }
 
 // 额外添加一些明确的绘图相关触发词
+const COMPLEX_SHAPE_ALIASES = getAvailableShapes().flatMap(s => s.aliases);
+
 const DRAWING_TRIGGERS = new Set([
   ...DRAWING_VERBS,
   "圆", "矩形", "三角形", "五角星", "多边形", "直线",

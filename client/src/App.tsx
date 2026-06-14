@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+﻿import { useState, useRef, useCallback, useEffect } from "react";
 import { useAppStore } from "./stores/appStore";
 import { voiceFeedback } from "./speech/voiceFeedback";
 import { parseCommand } from "./canvas/commandParser";
+import { drawShape } from "./canvas/shapeGenerator";
 import { canvasManager } from "./canvas/canvasManager";
 import { parseWithLLM, isLLMAvailable } from "./api/commandClient";
 import { correctHotwords } from "./speech/hotwordCorrector";
@@ -619,11 +620,11 @@ export default function App() {
           setIsProcessing(true);
           addLog("LLM: 请求中...");
           const origText = rawText;
-          parseWithLLM(origText).then((llmResult) => {
+          parseWithLLM(origText).then((result: any) => {
             setIsProcessing(false);
-            if (llmResult.type !== "unrecognized") {
-              const parsedCmd = { type: llmResult.type, params: llmResult.params || {}, raw: origText };
-              executeParsedDirect(parsedCmd, origText);
+            if (result.calls && result.calls.length > 0) {
+              addLog("LLM: " + result.calls.map((c: any) => c.name).join(", "));
+              executeToolCalls(result.calls, origText);
             } else {
               addLog("LLM: 无法解析");
               voiceFeedback.unrecognized();
@@ -635,6 +636,12 @@ export default function App() {
           });
         }
         break;
+    }
+  }
+
+  function executeToolCalls(calls: any[], rawText: string): void {
+    for (const call of calls) {
+      executeParsedDirect({ type: call.name as any, params: call.arguments, raw: rawText }, rawText);
     }
   }
 
@@ -1203,16 +1210,78 @@ export default function App() {
         }
         break;
       }
+  
+      case "draw_shape": {
+        if (!canvasManager.exists()) {
+          console.warn("[draw_shape] 画布不存在，请先新建画布");
+          voiceFeedback.guidance("请先新建画布");
+          return;
+        }
+        const renderer = (cmd.params.renderer as string) || "cloud";
+        const fc = canvasManager.getCanvas();
+        if (!fc) {
+          console.warn("[draw_shape] 画布实例为 null");
+          voiceFeedback.guidance("画布未就绪");
+          return;
+        }
+        console.log("[draw_shape] 渲染器:", renderer, "参数:", JSON.stringify(cmd.params));
+        try {
+          const obj = drawShape(renderer, fc, {
+            x: (cmd.params.x as number) ?? 0.5, y: (cmd.params.y as number) ?? 0.5, size: (cmd.params.size as number) ?? 100,
+            fill: cmd.params.fill as string, stroke: cmd.params.stroke as string,
+            strokeWidth: cmd.params.strokeWidth as number, opacity: cmd.params.opacity as number,
+            rotation: cmd.params.rotation as number, extras: cmd.params.extras as Record<string, number>,
+          });
+          if (obj) {
+            console.log("[draw_shape] 图形已添加到画布，对象数量:", fc.getObjects().length);
+            addLog("绘制: " + renderer);
+            voiceFeedback.success("已绘制");
+          } else {
+            console.warn("[draw_shape] drawShape 返回 null，渲染器:", renderer);
+            voiceFeedback.guidance("无法绘制该图形");
+          }
+        } catch (err) {
+          console.error("[draw_shape] 渲染异常:", err);
+          voiceFeedback.error("图形渲染失败");
+        }
+        break;
+      }
+      case "modify_shape": {
+        if (!canvasManager.exists()) return;
+        const fc2 = canvasManager.getCanvas(); const aObj = fc2?.getActiveObject();
+        if (!aObj) { voiceFeedback.noShapeSelected(); return; }
+        if (cmd.params.fill) aObj.set("fill", cmd.params.fill);
+        if (cmd.params.stroke) aObj.set("stroke", cmd.params.stroke);
+        if (cmd.params.strokeWidth != null) aObj.set("strokeWidth", Number(cmd.params.strokeWidth));
+        if (cmd.params.opacity != null) aObj.set("opacity", Number(cmd.params.opacity));
+        fc2?.renderAll(); voiceFeedback.success("已修改"); addLog("图形属性已修改");
+        break;
+      }
+      case "arrange_shapes": {
+        if (!canvasManager.exists()) return;
+        const op = (cmd.params.operation as string) || "bring_to_front";
+        const fc3 = canvasManager.getCanvas(); const obj2 = fc3?.getActiveObject();
+        if (!obj2) { voiceFeedback.noShapeSelected(); return; }
+        switch (op) {
+          case "bring_to_front": fc3?.bringObjectToFront(obj2); break;
+          case "send_to_back": fc3?.sendObjectToBack(obj2); break;
+          case "bring_forward": fc3?.bringObjectForward(obj2); break;
+          case "send_backward": fc3?.sendObjectBackwards(obj2); break;
+        }
+        fc3?.renderAll(); voiceFeedback.success("已排列"); addLog("排列: " + op);
+        break;
+      }
+
       case "unrecognized": {
         if (llmOnlineRef.current) {
           setIsProcessing(true);
           addLog("LLM: 请求中...");
           const origText = text;
-          parseWithLLM(origText).then((llmResult) => {
+          parseWithLLM(origText).then((result: any) => {
             setIsProcessing(false);
-            if (llmResult.type !== "unrecognized") {
-              const parsedCmd = { type: llmResult.type, params: llmResult.params || {}, raw: origText };
-              executeParsedDirect(parsedCmd, origText);
+            if (result.calls && result.calls.length > 0) {
+              addLog("LLM: " + result.calls.map((c: any) => c.name).join(", "));
+              executeToolCalls(result.calls, origText);
             } else {
               addLog("LLM: 无法解析");
               voiceFeedback.unrecognized();
