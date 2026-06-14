@@ -1,0 +1,94 @@
+{
+  "version": "1.0.0",
+  "description": "AI语音绘图工具 — 指令规范单一事实来源（SSOT）",
+
+  "positions": [
+    { "keyword": "左上角", "aliases": ["左上方", "左上"], "x": 0.2, "y": 0.2 },
+    { "keyword": "右上角", "aliases": ["右上方", "右上"], "x": 0.8, "y": 0.2 },
+    { "keyword": "左下角", "aliases": ["左下方", "左下"], "x": 0.2, "y": 0.8 },
+    { "keyword": "右下角", "aliases": ["右下方", "右下"], "x": 0.8, "y": 0.8 },
+    { "keyword": "中间", "aliases": ["中心", "居中", "正中央"], "x": 0.5, "y": 0.5 },
+    { "keyword": "上方", "aliases": ["上面", "顶部", "上边"], "x": 0.5, "y": 0.15 },
+    { "keyword": "下方", "aliases": ["下面", "底部", "下边"], "x": 0.5, "y": 0.85 },
+    { "keyword": "左边", "aliases": ["左方", "左面", "左侧"], "x": 0.15, "y": 0.5 },
+    { "keyword": "右边", "aliases": ["右方", "右面", "右侧"], "x": 0.85, "y": 0.5 }
+  ],
+
+  "directions": [
+    { "keyword": "向上", "aliases": ["往上", "上移", "移上"], "axis": "y", "delta": -50 },
+    { "keyword": "向下", "aliases": ["往下", "下移", "移下"], "axis": "y", "delta": 50 },
+    { "keyword": "向左", "aliases": ["往左", "左移", "移左"], "axis": "x", "delta": -50 },
+    { "keyword": "向右", "aliases": ["往右", "右移", "移右"], "axis": "x", "delta": 50 }
+  ],
+
+  "angles": [
+    { "keyword": "旋转90度", "aliases": ["转90度", "九十度"], "degrees": 90 },
+    { "keyword": "旋转180度", "aliases": ["转180度", "一百八十度", "翻转"], "degrees": 180 },
+    { "keyword": "旋转45度", "aliases": ["转45度", "四十五度", "倾斜"], "degrees": 45 },
+    { "keyword": "旋转30度", "aliases": ["转30度", "三十度"], "degrees": 30 },
+    { "keyword": "旋转60度", "aliases": ["转60度", "六十度"], "degrees": 60 }
+  ],
+
+  "shapes": [
+    { "type": "draw_line", "keywords": ["直线", "线段", "线"], "defaultParams": {} },
+    { "type": "draw_circle", "keywords": ["圆", "圆形", "圆圈"], "defaultParams": { "radius": 50 } },
+    { "type": "draw_rectangle", "keywords": ["矩形", "长方形", "方块", "方框"], "defaultParams": { "width": 100, "height": 80 } },
+    { "type": "draw_triangle", "keywords": ["三角形", "三角"], "defaultParams": { "size": 100 } },
+    { "type": "draw_star", "keywords": ["五角星", "星星", "星形"], "defaultParams": { "radius": 60 } },
+    { "type": "draw_polygon", "keywords": ["多边形", "六边形", "五边形", "八边形", "七边形", "九边形", "十边形"], "defaultParams": { "radius": 60, "sides": 6 } }
+  ],
+
+  "colors": [
+    { "keyword": "红色", "aliases": ["红"], "hex": "#FF0000" },
+    { "keyword": "橙色", "aliases": ["橙"], "hex": "#FF8800" },
+    { "keyword": "黄色", "aliases": ["黄"], "hex": "#FFFF00" },
+    { "keyword": "绿色", "aliases": ["绿"], "hex": "#00AA00" },
+    { "keyword": "蓝色", "aliases": ["蓝"], "hex": "#0066FF" },
+    { "keyword": "紫色", "aliases": ["紫"], "hex": "#8800FF" },
+    { "keyword": "黑色", "aliases": ["黑"], "hex": "#000000" },
+    { "keyword": "白色", "aliases": ["白"], "hex": "#FFFFFF" },
+    { "keyword": "灰色", "aliases": ["灰"], "hex": "#888888" },
+    { "keyword": "粉色", "aliases": ["粉", "粉红"], "hex": "#FF66AA" },
+    { "keyword": "棕色", "aliases": ["棕", "咖啡色"], "hex": "#884400" },
+    { "keyword": "金色", "aliases": ["金"], "hex": "#FFCC00" }
+  ],
+
+  "sizes": [
+    { "keyword": "大", "aliases": ["大的", "很大", "最大"], "radius": 100 },
+    { "keyword": "中", "aliases": ["中等", "普通", "一般"], "radius": 50 },
+    { "keyword": "小", "aliases": ["小的", "很小", "最小"], "radius": 25 }
+  ],
+
+  "actionVerbs": [
+    { "keyword": "画", "aliases": ["绘", "绘制"] },
+    { "keyword": "新建", "aliases": ["创建", "开"], "targets": ["画布", "画板", "新图"] },
+    { "keyword": "删除", "aliases": ["删掉", "去掉", "擦掉", "清除"] },
+    { "keyword": "移动", "aliases": ["挪", "移", "搬"] },
+    { "keyword": "修改", "aliases": ["改", "换成", "设为", "调整"] },
+    { "keyword": "撤销", "aliases": ["回退", "退回去", "上一步"] },
+    { "keyword": "恢复", "aliases": ["重做", "下一步"] },
+    { "keyword": "保存", "aliases": ["存", "导出", "下载", "另存"] },
+    { "keyword": "清空", "aliases": ["清除", "重置"] },
+    { "keyword": "复制", "aliases": ["拷贝", "克隆"] },
+    { "keyword": "放大", "aliases": ["变大", "调大"] },
+    { "keyword": "缩小", "aliases": ["变小", "调小"] },
+    { "keyword": "旋转", "aliases": ["转", "转动"] }
+  ],
+
+  "canvasSizes": [
+    { "keyword": "默认", "aliases": ["普通", "标准"], "width": 800, "height": 600 },
+    { "keyword": "A4", "aliases": ["a4", "A4纸"], "width": 794, "height": 1123 },
+    { "keyword": "正方形", "aliases": ["正方", "方形"], "width": 800, "height": 800 }
+  ],
+
+  "lineStyles": [
+    { "keyword": "虚线", "aliases": ["画虚线"], "dashArray": [10, 5] },
+    { "keyword": "点划线", "aliases": ["点划线", "点线"], "dashArray": [3, 5, 10, 5] },
+    { "keyword": "实线", "aliases": ["实线", "普通线"], "dashArray": [] }
+  ],
+
+  "fillModes": [
+    { "keyword": "填充", "aliases": ["填色", "涂色"], "mode": "fill" },
+    { "keyword": "轮廓", "aliases": ["描边", "空心", "不填充"], "mode": "outline" }
+  ]
+}
