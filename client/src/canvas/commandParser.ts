@@ -25,6 +25,13 @@ export type CommandType =
   | "draw_star"
   | "draw_polygon"
   | "line_style"
+  | "select_shape"
+  | "move_shape"
+  | "scale_shape"
+  | "rotate_shape"
+  | "copy_shape"
+  | "paste_shape"
+  | "flip_shape"
   | "unrecognized";
 
 export interface Command {
@@ -176,6 +183,26 @@ const rules: Rule[] = [
     patterns: [/清空.*画[布板面]/, /擦掉.*/, /清除.*画[布板面]/],
   },
 
+  // ---- F025: 缩放图形（必须在 F005 画布缩放之前，避免 /放大/ /缩小/ 误匹配）----
+  {
+    type: "scale_shape",
+    patterns: [
+      /图形.*放大/,
+      /放大.*图形/,
+      /图形.*变大/,
+    ],
+    extractParams: () => ({ factor: 1.2 }),
+  },
+  {
+    type: "scale_shape",
+    patterns: [
+      /图形.*缩小/,
+      /缩小.*图形/,
+      /图形.*变小/,
+    ],
+    extractParams: () => ({ factor: 0.8 }),
+  },
+
   // ---- F005: 画布缩放 ----
   {
     type: "canvas_zoom_fit",
@@ -249,50 +276,209 @@ const rules: Rule[] = [
     },
   },
 
-  // ---- F018: 画布平移 ----
+  // ---- F018: 画布平移（必须含"画布"，避免与 F024 图形移动混淆）----
   {
     type: "canvas_pan",
     patterns: [
-      /(?:向上|往上).*平?移/,
-      /上移/,
+      /画布.*(?:向上|往上|向?上).*移/,
+      /(?:向上|往上).*移.*画布/,
     ],
     extractParams: (_match, text) => {
-      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      const amount = extractNumeric(text, ["移"]);
       return { direction: "up", amount: amount || 100 };
     },
   },
   {
     type: "canvas_pan",
     patterns: [
-      /(?:向下|往下).*平?移/,
-      /下移/,
+      /画布.*(?:向下|往下|向?下).*移/,
+      /(?:向下|往下).*移.*画布/,
     ],
     extractParams: (_match, text) => {
-      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      const amount = extractNumeric(text, ["移"]);
       return { direction: "down", amount: amount || 100 };
     },
   },
   {
     type: "canvas_pan",
     patterns: [
-      /(?:向左|往左).*平?移/,
-      /左移/,
+      /画布.*(?:向左|往左|向?左).*移/,
+      /(?:向左|往左).*移.*画布/,
     ],
     extractParams: (_match, text) => {
-      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      const amount = extractNumeric(text, ["移"]);
       return { direction: "left", amount: amount || 100 };
     },
   },
   {
     type: "canvas_pan",
     patterns: [
-      /(?:向右|往右).*平?移/,
-      /右移/,
+      /画布.*(?:向右|往右|向?右).*移/,
+      /(?:向右|往右).*移.*画布/,
     ],
     extractParams: (_match, text) => {
-      const amount = extractNumeric(text, ["平移"]) || extractNumeric(text, ["移"]);
+      const amount = extractNumeric(text, ["移"]);
       return { direction: "right", amount: amount || 100 };
     },
+  },
+
+  // ---- F023: 选中图形 ----
+  {
+    type: "select_shape",
+    patterns: [
+      /选中.*(?:最近|最后|上一[个些]).*/,
+      /选择.*(?:最近|最后|上一[个些]).*/,
+    ],
+    extractParams: () => ({ mode: "last" }),
+  },
+  {
+    type: "select_shape",
+    patterns: [
+      /选中.*(?:圆|矩形|三角|直线|五角星|多边)/,
+      /选择.*(?:圆|矩形|三角|直线|五角星|多边)/,
+      /选中.*(?:长方形|正方形|星|线)/,
+      /选择.*(?:长方形|正方形|星|线)/,
+    ],
+    extractParams: (_match, text) => {
+      const types = ["圆形", "圆", "矩形", "长方形", "正方形", "三角形", "三角", "直线", "线", "五角星", "星形", "星星", "多边形"];
+      for (const t of types) {
+        if (text.includes(t)) return { mode: "type", shapeType: t };
+      }
+      return { mode: "type", shapeType: "圆形" };
+    },
+  },
+  {
+    type: "select_shape",
+    patterns: [
+      /全选/,
+      /选中.*所有/,
+      /选择.*所有/,
+      /选中.*全部/,
+    ],
+    extractParams: () => ({ mode: "all" }),
+  },
+  {
+    type: "select_shape",
+    patterns: [
+      /取消.*(?:选中|选择)/,
+      /取消选中/,
+      /清除.*(?:选中|选择)/,
+    ],
+    extractParams: () => ({ mode: "deselect" }),
+  },
+
+  // ---- F024: 移动图形（含"图形"关键词，区别于 F018 画布平移）----
+  {
+    type: "move_shape",
+    patterns: [
+      /图形.*(?:向上|往上|向?上).*移/,
+      /(?:向上|往上).*移.*图形/,
+      /上移.*图形/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["移"]);
+      return { direction: "up", amount: amount || 50 };
+    },
+  },
+  {
+    type: "move_shape",
+    patterns: [
+      /图形.*(?:向下|往下|向?下).*移/,
+      /(?:向下|往下).*移.*图形/,
+      /下移.*图形/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["移"]);
+      return { direction: "down", amount: amount || 50 };
+    },
+  },
+  {
+    type: "move_shape",
+    patterns: [
+      /图形.*(?:向左|往左|向?左).*移/,
+      /(?:向左|往左).*移.*图形/,
+      /左移.*图形/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["移"]);
+      return { direction: "left", amount: amount || 50 };
+    },
+  },
+  {
+    type: "move_shape",
+    patterns: [
+      /图形.*(?:向右|往右|向?右).*移/,
+      /(?:向右|往右).*移.*图形/,
+      /右移.*图形/,
+    ],
+    extractParams: (_match, text) => {
+      const amount = extractNumeric(text, ["移"]);
+      return { direction: "right", amount: amount || 50 };
+    },
+  },
+
+  // ---- F026: 旋转图形 ----
+  {
+    type: "rotate_shape",
+    patterns: [
+      /图形.*(?:顺时针|向右).*旋[转]/,
+      /(?:顺时针|向右).*旋[转].*图形/,
+      /旋[转].*图形/,
+      /图形.*旋[转]/,
+    ],
+    extractParams: (_match, text) => {
+      const angle = extractNumeric(text, ["旋转", "旋", "转"]);
+      return { angle: angle || 45 };
+    },
+  },
+  {
+    type: "rotate_shape",
+    patterns: [
+      /图形.*(?:逆时针|向左).*旋[转]/,
+      /(?:逆时针|向左).*旋[转].*图形/,
+    ],
+    extractParams: (_match, text) => {
+      const angle = extractNumeric(text, ["旋转", "旋", "转"]);
+      return { angle: -(angle || 45) };
+    },
+  },
+
+  // ---- F027: 复制粘贴 ----
+  {
+    type: "copy_shape",
+    patterns: [
+      /复制.*图形/,
+      /图形.*复制/,
+    ],
+  },
+  {
+    type: "paste_shape",
+    patterns: [
+      /粘贴.*图形/,
+      /图形.*粘贴/,
+    ],
+  },
+
+  // ---- F028: 翻转图形 ----
+  {
+    type: "flip_shape",
+    patterns: [
+      /(?:水平|左右).*翻[转]/,
+      /翻[转].*(?:水平|左右)/,
+      /图形.*(?:水平|左右).*翻/,
+      /(?:水平|左右).*翻.*图形/,
+    ],
+    extractParams: () => ({ direction: "horizontal" }),
+  },
+  {
+    type: "flip_shape",
+    patterns: [
+      /(?:垂直|上下).*翻[转]/,
+      /翻[转].*(?:垂直|上下)/,
+      /图形.*(?:垂直|上下).*翻/,
+      /(?:垂直|上下).*翻.*图形/,
+    ],
+    extractParams: () => ({ direction: "vertical" }),
   },
 ];
 
@@ -613,6 +799,8 @@ const drawRules: Rule[] = [
       /取消.*虚线/,
       /取消.*点划/,
       /取消.*点线/,
+      /^直线$/,
+      /直线模式/,
     ],
     extractParams: () => ({ mode: "solid" }),
   },
